@@ -1,5 +1,7 @@
 # VMAOS OpenAPI 示例（Node.js）
 
+其他语言：[Java](../openapi-java-samples/README.md)、[Go](../openapi-go-samples/README.md)。
+
 两个可以直接运行的服务端 Demo：
 
 - `query:boards`：签名调用 `POST /open-api/board/query`，使用 `nextCursor` 查询所有批次。
@@ -10,7 +12,7 @@
 需要 Node.js 24.15.0 或更高版本。AK/SK 从 VMAOS Manage 获取，并配置调用服务器的出口 IP 白名单及权限。系统时钟应准确。
 
 ```bash
-cd vmaos-samples/openapi-samples
+cd vmaos-samples/openapi-nodejs-samples
 npm ci
 cp .env.example .env
 ```
@@ -90,6 +92,63 @@ npm run upload -- ./app.apk /应用/app.apk APK
 npm run probe -- 123456789
 ```
 
+### 查看 OpenAPI 入参和出参日志
+
+`npm run upload` 和 `npm run probe` 默认输出每次 OpenAPI 调用的日志。`upload-sts` 申请、每一轮 `upload-probe` 都显示：
+
+- `[OpenAPI request]`：HTTP 方法、接口路径和实际发送的 JSON 入参。
+- `[OpenAPI response]`：HTTP 状态、耗时和 JSON 响应信封（`code`、`message`、`traceId`、`data`）。失败响应同样记录，便于按 traceId 排查。
+- `[OpenAPI error]`：网络异常或超时的异常类型和耗时；非 JSON 响应只记录状态及说明，不打印原始正文。
+
+示例（节选，地址、编号及 traceId 均为占位值）：
+
+```text
+[OpenAPI request] POST /open-api/storage/upload-sts
+{
+  "method": "POST",
+  "path": "/open-api/storage/upload-sts",
+  "event": "request",
+  "body": {
+    "tenantPath": "/教程/demo.zip",
+    "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+    "sizeBytes": 3,
+    "fileCategory": "OTHER",
+    "createDirectories": true,
+    "durationSeconds": 3600
+  }
+}
+[OpenAPI response] POST /open-api/storage/upload-sts
+{
+  "method": "POST",
+  "path": "/open-api/storage/upload-sts",
+  "event": "response",
+  "httpStatus": 200,
+  "durationMs": 42,
+  "body": {
+    "code": 200000000,
+    "message": "success",
+    "traceId": "demo-trace",
+    "data": {
+      "fileTid": "123456789",
+      "status": 0,
+      "sts": {
+        "endpoint": "https://s3.example.com",
+        "region": "us-east-1",
+        "forcePathStyle": true,
+        "bucket": "sample-bucket",
+        "objectKey": "uploads/OTHER/example-object",
+        "accessKeyId": "[REDACTED]",
+        "secretAccessKey": "[REDACTED]",
+        "sessionToken": "[REDACTED]",
+        "expiration": "2099-01-01T00:00:00Z"
+      }
+    }
+  }
+}
+```
+
+日志不输出认证请求头、AK/SK 或签名；JSON 中的临时凭证等敏感字段递归替换为 `[REDACTED]`，实际交给 S3 SDK 的凭证保持原值。分片进度仍单独显示。日志包含网盘路径等业务数据，分享前应检查。
+
 示例不自动续签 STS、不自动重发 `upload-sts`、不提供断点续传；凭证过期或上传失败后需先确认服务端状态。上传过程中不要修改源文件。分片 SDK 对传输失败最多尝试 3 次，每次请求限时 60 秒；OpenAPI 请求限时 30 秒，写请求不自动重试。`durationSeconds=3600` 只是申请的凭证有效期，不保证文件一定能在期限内传完。
 
 ## 签名说明
@@ -112,7 +171,7 @@ application/json
 
 将 HMAC 结果编码为 64 位小写十六进制，放入 `X-VMAOS-Signature`；同时发送 `X-VMAOS-Algorithm`、`X-VMAOS-Access-Key`、`X-VMAOS-Timestamp`。三个示例接口均无 URL 查询参数，路径为固定 ASCII 路径。签名客户端限定这些接口，不是通用 OpenAPI SDK。
 
-注意：请求体摘要用于请求验签；上传参数 `sha256` 则是完整文件摘要，两者输入不同。错误输出保留 HTTP 状态、业务码和 traceId，可在 Manage 对照错误信息排查；不会输出完整 STS 响应。
+注意：请求体摘要用于请求验签；上传参数 `sha256` 则是完整文件摘要，两者输入不同。错误输出保留 HTTP 状态、业务码和 traceId，可在 Manage 对照错误信息排查；输出 STS 响应时会隐藏临时凭证。
 
 ## 验证
 

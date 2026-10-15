@@ -5,7 +5,9 @@
 | 教程 | 内容 |
 | --- | --- |
 | [WebRTC SDK](vmaos-webrtc-sdk-samples/README.md) | 原生 H5、React、Vue、script 标签四种接入方式 |
-| [OpenAPI](openapi-samples/README.md) | AK/SK 签名、板卡滚动查询、STS + S3 分片上传 + 文件状态探测 |
+| [OpenAPI · Node.js](openapi-nodejs-samples/README.md) | Node.js + AWS SDK v3：板卡查询、STS 分片上传与探测 |
+| [OpenAPI · Java](openapi-java-samples/README.md) | Java + AWS SDK 2.x：板卡查询、STS 分片上传与探测 |
+| [OpenAPI · Go](openapi-go-samples/README.md) | Go + AWS SDK v2：板卡查询、STS 分片上传与探测 |
 
 ```bash
 git clone https://github.com/vmaos-cloud/vmaos-samples.git

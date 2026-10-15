@@ -151,3 +151,66 @@ test('multipart failure aborts precise upload and never completes or leaks SDK e
   } }) }), error => /分片上传失败/.test(error.message) && !error.message.includes('must-not-print'));
   assert.deepEqual(commands, ['CreateMultipartUploadCommand', 'UploadPartCommand', 'AbortMultipartUploadCommand']);
 });
+
+test('upload API logs request and response while preserving real STS credentials for S3', async () => {
+  const logs = [];
+  const envelope = { code: 200000000, message: 'success', traceId: 'demo-trace', data: {
+    fileTid: '123', status: 0, sts: { ...sts, accessKeyId: 'temporary-access',
+      secretAccessKey: 'temporary-secret', sessionToken: 'temporary-token' },
+  } };
+  let sentBody;
+  const api = createOpenApiClient({ baseUrl: 'https://example.com', accessKey: ak, secretKey: sk,
+    logger: entry => logs.push(entry), fetchImpl: async (_, options) => {
+      sentBody = options.body.toString(); return Response.json(envelope);
+    } });
+  const body = { tenantPath: '/应用/demo.xapk', sha256: digest('abc'), sizeBytes: 3, fileCategory: 'APK' };
+  const result = await api('/open-api/storage/upload-sts', body);
+  assert.deepEqual(logs[0], { method: 'POST', path: '/open-api/storage/upload-sts', event: 'request', body });
+  assert.equal(sentBody, JSON.stringify(body));
+  assert.equal(logs[1].httpStatus, 200); assert.equal(logs[1].body.traceId, 'demo-trace');
+  assert.equal(logs[1].body.data.sts.objectKey, 'sample-object');
+  assert.equal(logs[1].body.data.sts.accessKeyId, '[REDACTED]');
+  assert.equal(logs[1].body.data.sts.secretAccessKey, '[REDACTED]');
+  assert.equal(logs[1].body.data.sts.sessionToken, '[REDACTED]');
+  assert.equal(typeof logs[1].durationMs, 'number');
+  assert.equal(result.sts.secretAccessKey, 'temporary-secret');
+  const text = JSON.stringify(logs);
+  for (const secret of [ak, sk, 'temporary-access', 'temporary-secret', 'temporary-token']) {
+    assert.ok(!text.includes(secret));
+  }
+});
+
+test('probe logs complete error envelope and recursively redacts sensitive fields', async () => {
+  const logs = [];
+  const api = createOpenApiClient({ baseUrl: 'https://example.com', accessKey: ak, secretKey: sk,
+    logger: entry => logs.push(entry), fetchImpl: async () => Response.json({
+      code: 500904001, message: 'internal server error', traceId: 'error-trace',
+      details: [{ secret: 'hidden-response', 'session_token': 'hidden-token' }],
+    }, { status: 500 }) });
+  await assert.rejects(api('/open-api/storage/upload-probe', {
+    fileTid: '123', forceFailIfIncomplete: false, nested: [{ SK: 'hidden-request' }],
+  }), /500904001/);
+  assert.equal(logs[0].body.fileTid, '123');
+  assert.equal(logs[0].body.nested[0].SK, '[REDACTED]');
+  assert.equal(logs[1].httpStatus, 500);
+  assert.equal(logs[1].body.message, 'internal server error');
+  assert.equal(logs[1].body.traceId, 'error-trace');
+  assert.ok(!JSON.stringify(logs).includes('hidden-'));
+});
+
+test('non-JSON and network failures log diagnostics without dumping raw contents', async () => {
+  for (const network of [false, true]) {
+    const logs = [];
+    const api = createOpenApiClient({ baseUrl: 'https://example.com', accessKey: ak, secretKey: sk,
+      logger: entry => logs.push(entry), fetchImpl: async () => {
+        if (network) throw new TypeError('hidden-network-detail');
+        return new Response('hidden-page-content', { status: 502 });
+      } });
+    await assert.rejects(api('/open-api/storage/upload-probe', { fileTid: '123' }));
+    assert.equal(logs[0].event, 'request');
+    assert.equal(logs[1].event, network ? 'error' : 'response');
+    if (network) assert.equal(logs[1].errorType, 'TypeError');
+    else assert.equal(logs[1].httpStatus, 502);
+    assert.ok(!JSON.stringify(logs).includes('hidden-'));
+  }
+});
