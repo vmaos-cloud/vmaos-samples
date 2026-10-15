@@ -1,0 +1,7 @@
+node_modules/
+dist/
+script/public/sdk/
+playwright-report/
+test-results/
+.env
+.env.*

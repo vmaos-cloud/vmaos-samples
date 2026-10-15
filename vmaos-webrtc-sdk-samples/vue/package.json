@@ -1,0 +1,20 @@
+{
+  "name": "@vmaos/webrtc-sdk-sample-vue",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.4.1",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5176 --strictPort",
+    "build": "vite build --mode release",
+    "preview": "vite preview --host 127.0.0.1 --port 5176",
+    "test": "node --test ticket.test.mjs"
+  },
+  "dependencies": {
+    "@vmaos/webrtc-sdk": "0.1.1",
+    "vue": "3.5.43"
+  },
+  "devDependencies": {
+    "vite": "8.3.0"
+  }
+}
