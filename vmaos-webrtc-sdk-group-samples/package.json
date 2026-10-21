@@ -1,0 +1,22 @@
+{
+  "name": "@vmaos/webrtc-sdk-group-samples",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.4.1",
+  "engines": {
+    "node": ">=24.15.0"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server.mjs",
+    "test": "node --test test/server.test.mjs",
+    "check": "node --check server.mjs && node --check public/main.js && node --check public/preview.js",
+    "test:browser": "node --test test/browser.test.mjs"
+  },
+  "dependencies": {
+    "@vmaos/webrtc-sdk": "0.1.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}

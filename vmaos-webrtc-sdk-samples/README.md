@@ -1,6 +1,6 @@
-# VMAOS WebRTC SDK 示例
+# VMAOS WebRTC 单控教程
 
-使用 [@vmaos/webrtc-sdk](https://www.npmjs.com/package/@vmaos/webrtc-sdk) 连接和控制 VMAOS 云机。四个教程各自安装依赖、各自运行，可单独复制使用。
+使用 [@vmaos/webrtc-sdk](https://www.npmjs.com/package/@vmaos/webrtc-sdk) 连接和控制 VMAOS 云机。本目录为单控教程，四种示例各自安装依赖、各自运行，可单独复制使用。多台云机同步操作请参阅 [WebRTC 群控教程](../vmaos-webrtc-sdk-group-samples/README.md)。
 
 **AK/SK 不能放到前端项目中，必须由业务后端调用 OpenAPI。前端只使用短期连接票据，不保存票据到 URL、日志或浏览器存储。**
 
