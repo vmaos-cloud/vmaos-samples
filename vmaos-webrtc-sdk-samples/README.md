@@ -1,6 +1,6 @@
 # VMAOS WebRTC 单控教程
 
-使用 [@vmaos/webrtc-sdk](https://www.npmjs.com/package/@vmaos/webrtc-sdk) 连接和控制 VMAOS 云机。本目录为单控教程，四种示例各自安装依赖、各自运行，可单独复制使用。多台云机同步操作请参阅 [WebRTC 群控教程](../vmaos-webrtc-sdk-group-samples/README.md)。
+使用 [@vmaos/webrtc-sdk](https://www.npmjs.com/package/@vmaos/webrtc-sdk) 连接和控制 VMAOS 云机。本目录为单控教程，使用 SDK **0.2.0**，支持本地摄像头按需传入云机。四种示例各自安装依赖、各自运行，可单独复制使用。多台云机同步操作请参阅 [WebRTC 群控教程](../vmaos-webrtc-sdk-group-samples/README.md)。
 
 **AK/SK 不能放到前端项目中，必须由业务后端调用 OpenAPI。前端只使用短期连接票据，不保存票据到 URL、日志或浏览器存储。**
 
@@ -66,4 +66,10 @@ pnpm exec playwright install chromium
 pnpm run verify:browser
 ```
 
-浏览器验证检查输入校验、SDK 初始化与销毁、安全提示和移动端布局；真实音视频连接需要有效云机票据。
+浏览器验证检查输入校验、SDK 初始化与销毁、摄像头状态与操作、安全提示和移动端布局；真实音视频连接需要有效云机票据。
+
+## 摄像头教程
+
+四个示例均包含独立的 `camera.js` 与界面控件，详见各自 README 的“本地摄像头”一节。在云机应用中打开摄像头后授权本地设备；页面显示采集状态，支持失败重试、关闭和前后切换。摄像头错误保留桌面连接，断开或离开页面时释放设备。
+
+浏览器采集需 **HTTPS 或 localhost**，普通内网 IP HTTP 无法调用本地摄像头；iframe 需宿主允许 `camera`。SDK 只申请视频，不申请麦克风。自动浏览器验证使用事件和操作桩检查示例 UI，不连接实际云机、不代表摄像头端到端验收。
