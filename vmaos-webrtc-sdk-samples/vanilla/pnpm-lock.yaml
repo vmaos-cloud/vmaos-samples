@@ -167,8 +167,8 @@ importers:
   .:
     dependencies:
       '@vmaos/webrtc-sdk':
-        specifier: 0.1.1
-        version: 0.1.1
+        specifier: 0.2.0
+        version: 0.2.0
     devDependencies:
       vite:
         specifier: 8.3.0
@@ -278,8 +278,8 @@ packages:
   '@rolldown/pluginutils@1.0.1':
     resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
 
-  '@vmaos/webrtc-sdk@0.1.1':
-    resolution: {integrity: sha512-ZciXFYO/HK7HTNYEvIW3fSFDpCzBFEcW+xYqd6VKrNZld0fKjlg7SjtxkMw870FPAGI/N93KeiKdejL0R1o3NA==}
+  '@vmaos/webrtc-sdk@0.2.0':
+    resolution: {integrity: sha512-8XwLmCpVHbsN+T2biXX4jYN/4GisJ/88KsJldvq/mXHt6cRn9qhruWCz5ietxQvHZqYYbwHeMK3BnMMIAfQrWQ==}
 
   detect-libc@2.1.2:
     resolution: {integrity: sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==}
@@ -510,7 +510,7 @@ snapshots:
 
   '@rolldown/pluginutils@1.0.1': {}
 
-  '@vmaos/webrtc-sdk@0.1.1':
+  '@vmaos/webrtc-sdk@0.2.0':
     dependencies:
       eventemitter3: 5.0.1
       uuid: 14.0.0
