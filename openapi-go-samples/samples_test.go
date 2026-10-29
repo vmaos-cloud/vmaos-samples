@@ -29,9 +29,9 @@ const fixtureSK = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
 
 func hashBytes(bytes []byte) string { sum := sha256.Sum256(bytes); return hex.EncodeToString(sum[:]) }
 func TestSignatureVector(t *testing.T) {
-	u, _ := url.Parse("https://api.vmaos.example/openapi/v1/containers/query?page=1")
+	u, _ := url.Parse("https://openapi.sample.com/openapi/v1/containers/query?page=1")
 	got, err := signature(u, []byte(`{"status":1}`), fixtureAK, fixtureSK, "1789893015123")
-	if err != nil || got != "630cb70b8a822c78ab4c7b4e2207f09cbd942485e2a70f365e69459d434f46c3" {
+	if err != nil || got != "e55d0512e0508809e9b21ce7fab8f084590fc07240066cae65e2d9f3de0849cb" {
 		t.Fatalf("signature mismatch: %v", err)
 	}
 	if _, err = signature(u, nil, fixtureAK, fixtureSK+"=", "1"); err == nil {
@@ -49,9 +49,9 @@ func TestCanonicalQueryAndDefaultPort(t *testing.T) {
 }
 func TestEnvIsLiteralAndProcessOverrides(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".env")
-	_ = os.WriteFile(path, []byte("VMAOS_BASE_URL=https://example.com\nVMAOS_ACCESS_KEY='file-value'\nVMAOS_SECRET_KEY=$(not-executed)\n"), 0600)
-	cfg, err := loadConfig(path, func(k string) (string, bool) { return "env-value", k == "VMAOS_ACCESS_KEY" })
-	if err != nil || cfg["VMAOS_ACCESS_KEY"] != "env-value" || cfg["VMAOS_SECRET_KEY"] != "$(not-executed)" {
+	_ = os.WriteFile(path, []byte("OPENAPI_BASE_URL=https://example.com\nOPENAPI_ACCESS_KEY='file-value'\nOPENAPI_SECRET_KEY=$(not-executed)\n"), 0600)
+	cfg, err := loadConfig(path, func(k string) (string, bool) { return "env-value", k == "OPENAPI_ACCESS_KEY" })
+	if err != nil || cfg["OPENAPI_ACCESS_KEY"] != "env-value" || cfg["OPENAPI_SECRET_KEY"] != "$(not-executed)" {
 		t.Fatal("unexpected environment parsing", err)
 	}
 }
@@ -63,8 +63,8 @@ func TestHTTPExactSignatureAndSafeLogs(t *testing.T) {
 		raw, _ := io.ReadAll(r.Body)
 		requestBody = string(raw)
 		u, _ := url.Parse(origin + r.URL.Path)
-		expected, _ := signature(u, raw, fixtureAK, fixtureSK, r.Header.Get("X-VMAOS-Timestamp"))
-		if expected != r.Header.Get("X-VMAOS-Signature") {
+		expected, _ := signature(u, raw, fixtureAK, fixtureSK, r.Header.Get("X-API-Timestamp"))
+		if expected != r.Header.Get("X-API-Signature") {
 			w.WriteHeader(401)
 			return
 		}

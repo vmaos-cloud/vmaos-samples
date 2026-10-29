@@ -14,7 +14,7 @@ const sk = Buffer.from(Array.from({ length: 32 }, (_, i) => i)).toString('base64
 const ak = 'AK7WyN4fQp9_z3Hk2mLs8DxA';
 const digest = body => createHash('sha256').update(body).digest('hex');
 async function fixture(t, content = Buffer.from('abc')) {
-  const dir = await mkdtemp(join(tmpdir(), 'vmaos-public-sample-'));
+  const dir = await mkdtemp(join(tmpdir(), 'public-sample-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const path = join(dir, 'demo.bin'); await writeFile(path, content);
   return path;
@@ -24,14 +24,14 @@ const sts = { endpoint: 'https://s3.example.com', region: 'demo-region', forcePa
   secretAccessKey: 'synthetic', sessionToken: 'synthetic', expiration: '2099-01-01T00:00:00Z' };
 
 test('HMAC matches published interoperability vector; strict SK decoding', () => {
-  const headers = signRequest(new URL('https://api.vmaos.example/openapi/v1/containers/query?page=1'),
+  const headers = signRequest(new URL('https://openapi.sample.com/openapi/v1/containers/query?page=1'),
     Buffer.from('{"status":1}'), ak, sk, '1789893015123');
-  assert.equal(headers['X-VMAOS-Signature'], '630cb70b8a822c78ab4c7b4e2207f09cbd942485e2a70f365e69459d434f46c3');
+  assert.equal(headers['X-API-Signature'], 'e55d0512e0508809e9b21ce7fab8f084590fc07240066cae65e2d9f3de0849cb');
   assert.throws(() => signRequest(new URL('https://example.com'), Buffer.from('{}'), ak, sk + '='), /SK/);
 });
 
 test('query canonicalization sorts encoded names/values and retains duplicates', () => {
-  const sign = query => signRequest(new URL(`https://example.com/open-api/board/query?${query}`), Buffer.from('{}'), ak, sk, '1')['X-VMAOS-Signature'];
+  const sign = query => signRequest(new URL(`https://example.com/open-api/board/query?${query}`), Buffer.from('{}'), ak, sk, '1')['X-API-Signature'];
   assert.equal(sign('x=b&x=a&space=a+b'), sign('space=a%20b&x=a&x=b'));
   assert.notEqual(sign('x=b&x=a'), sign('x=a'));
 });
@@ -41,7 +41,7 @@ test('client signs exact transmitted UTF-8 bytes and uses nine-digit success cod
   const api = createOpenApiClient({ baseUrl: 'https://api.example.com', accessKey: ak, secretKey: sk,
     fetchImpl: async (url, options) => {
       request = options;
-      const signed = signRequest(url, options.body, ak, sk, options.headers['X-VMAOS-Timestamp']);
+      const signed = signRequest(url, options.body, ak, sk, options.headers['X-API-Timestamp']);
       assert.deepEqual(options.headers, signed);
       assert.equal(options.redirect, 'error');
       assert.equal(options.body.toString(), '{"name":"中文"}');

@@ -1,4 +1,4 @@
-# VMAOS OpenAPI Go 教程
+# OpenAPI Go 教程
 
 其他语言：[Node.js](../openapi-nodejs-samples/README.md)、[Java](../openapi-java-samples/README.md)。
 
@@ -6,10 +6,10 @@
 
 ## 准备与运行
 
-需要 **Go 1.24 或更高版本**。在本教程目录运行：
+需要 **Go 1.24 或更高版本**。在教程代码根目录运行：
 
 ```bash
-cd vmaos-samples/openapi-go-samples
+cd openapi-go-samples
 cp .env.example .env
 # 编辑 .env，填入自己的 OpenAPI 地址、AK、SK
 go mod download
@@ -19,16 +19,16 @@ go run . upload ./app.xapk /应用/app.xapk APK
 go run . probe 123456789
 ```
 
-`go.mod`、`go.sum` 固定公共依赖版本。也可 `go build -o vmaos-openapi-samples .` 后运行这个程序；生成的本机可执行文件已忽略。按 Ctrl+C 取消，正在上传时会尝试中止本次分片，已完成的对象不会被此操作删除。
+`go.mod`、`go.sum` 固定公共依赖版本。也可 `go build -o openapi-samples .` 后运行这个程序；生成的本机可执行文件已忽略。按 Ctrl+C 取消，正在上传时会尝试中止本次分片，已完成的对象不会被此操作删除。
 
 ## AK/SK 与请求签名
 
 `.env` 仅包含以下三个变量，填写你自己的值；操作系统环境变量优先于 `.env`。样例地址是占位值，请从 Manage 的 OpenAPI 概览确认实际地址，只填协议、域名和可选端口，不带 `/open-api` 路径。只有本机调试允许 HTTP，其他环境使用 HTTPS。
 
 ```dotenv
-VMAOS_BASE_URL=https://openapi.example.com
-VMAOS_ACCESS_KEY=replace-with-your-ak
-VMAOS_SECRET_KEY=replace-with-your-sk
+OPENAPI_BASE_URL=https://openapi.sample.com
+OPENAPI_ACCESS_KEY=replace-with-your-ak
+OPENAPI_SECRET_KEY=replace-with-your-sk
 ```
 
 AK/SK 从 Manage 获取，确认启用、未过期、出口 IP 白名单和接口权限正确。校准服务器时钟。不要在网页、App、日志或 Git 中放置 AK/SK；`.env` 和构建产物已忽略。环境文件按字面值读取，不执行 shell 表达式，不展开变量。不要把 `.env` 提交到仓库。
@@ -49,7 +49,7 @@ application/json
 <实际请求体字节的 SHA-256，小写十六进制>
 ```
 
-用解码后的 SK 对这个字符串执行 HMAC-SHA-256，输出 64 位小写十六进制作为 `X-VMAOS-Signature`。同时发送 `X-VMAOS-Algorithm: HMAC-SHA-256`、`X-VMAOS-Access-Key`、`X-VMAOS-Timestamp`。本教程的三个接口均为固定 ASCII 路径且无 URL 查询参数；客户端是教程示例，不是覆盖所有接口的通用 SDK。
+用解码后的 SK 对这个字符串执行 HMAC-SHA-256，输出 64 位小写十六进制作为 `X-API-Signature`。同时发送 `X-API-Algorithm: HMAC-SHA-256`、`X-API-Access-Key`、`X-API-Timestamp`。本教程的三个接口均为固定 ASCII 路径且无 URL 查询参数；客户端是教程示例，不是覆盖所有接口的通用 SDK。
 
 ## 1. 查询板卡
 
@@ -137,7 +137,7 @@ AK/SK、认证请求头和签名不输出。JSON 中 `accessKeyId`、`secretAcce
 
 ```bash
 go test ./...
-go build -o vmaos-openapi-samples .
+go build -o openapi-samples .
 ```
 
 测试使用合成密钥、httptest 服务与模拟 S3，覆盖签名向量、实际发送字节、日志脱敏、分页、秒传、分片与 ETag、失败清理、探测终态及本地取消；不会读取你的 `.env` 或访问真实租户。真实上传闭环仍需有效 AK/SK、可达的 S3 endpoint 和运行中的文件校验服务。

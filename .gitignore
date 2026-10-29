@@ -8,4 +8,7 @@ test-results/
 !.env.example
 *.log
 target/
-openapi-go-samples/vmaos-openapi-samples
+openapi-go-samples/openapi-samples
+
+# Existing local executable
+openapi-go-samples/*openapi-samples
