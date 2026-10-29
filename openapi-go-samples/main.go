@@ -19,7 +19,7 @@ func run(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	api, err := newClient(cfg["VMAOS_BASE_URL"], cfg["VMAOS_ACCESS_KEY"], cfg["VMAOS_SECRET_KEY"], func(entry any) { b, _ := json.MarshalIndent(entry, "", "  "); fmt.Printf("[OpenAPI]\n%s\n", b) })
+	api, err := newClient(cfg["OPENAPI_BASE_URL"], cfg["OPENAPI_ACCESS_KEY"], cfg["OPENAPI_SECRET_KEY"], func(entry any) { b, _ := json.MarshalIndent(entry, "", "  "); fmt.Printf("[OpenAPI]\n%s\n", b) })
 	if err != nil {
 		return err
 	}

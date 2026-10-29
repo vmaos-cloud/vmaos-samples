@@ -8,7 +8,7 @@ function redactLogValue(value) {
   if (Array.isArray(value)) return value.map(redactLogValue);
   if (value === null || typeof value !== 'object') return value;
   return Object.fromEntries(Object.entries(value).map(([key, child]) => [key,
-    /^(ak|sk|accesskey|accesskeyid|accesskeysecret|secretkey|secretaccesskey|sessiontoken|token|password|secret|signature|authorization|xvmaosaccesskey|xvmaossignature)$/i
+    /^(ak|sk|accesskey|accesskeyid|accesskeysecret|secretkey|secretaccesskey|sessiontoken|token|password|secret|signature|authorization|xapiaccesskey|xapisignature)$/i
       .test(key.replace(/[-_]/g, '')) ? '[REDACTED]' : redactLogValue(child),
   ]));
 }
@@ -31,10 +31,10 @@ export function signRequest(url, body, accessKey, secretKey, timestamp = String(
   try {
     return {
       'Content-Type': 'application/json',
-      'X-VMAOS-Algorithm': 'HMAC-SHA-256',
-      'X-VMAOS-Access-Key': accessKey,
-      'X-VMAOS-Timestamp': timestamp,
-      'X-VMAOS-Signature': createHmac('sha256', key).update(canonical, 'utf8').digest('hex'),
+      'X-API-Algorithm': 'HMAC-SHA-256',
+      'X-API-Access-Key': accessKey,
+      'X-API-Timestamp': timestamp,
+      'X-API-Signature': createHmac('sha256', key).update(canonical, 'utf8').digest('hex'),
     };
   } finally {
     key.fill(0);
@@ -46,7 +46,7 @@ export function createOpenApiClient({ baseUrl, accessKey, secretKey, fetchImpl =
   const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(base.hostname);
   if ((base.protocol !== 'https:' && !(base.protocol === 'http:' && loopback))
       || base.username || base.password || base.pathname !== '/' || base.search || base.hash) {
-    throw new Error('VMAOS_BASE_URL 必须是 HTTPS origin（仅本机调试允许 HTTP）');
+    throw new Error('OPENAPI_BASE_URL 必须是 HTTPS origin（仅本机调试允许 HTTP）');
   }
   if (!accessKey || /[\s\r\n]/.test(accessKey) || !secretKey) throw new Error('请设置 AK/SK 环境变量');
   return async (path, data, { timeoutMs = 30_000 } = {}) => {
@@ -88,8 +88,8 @@ export function createOpenApiClient({ baseUrl, accessKey, secretKey, fetchImpl =
 }
 
 export function clientFromEnv({ logger } = {}) {
-  return createOpenApiClient({ baseUrl: process.env.VMAOS_BASE_URL,
-    accessKey: process.env.VMAOS_ACCESS_KEY, secretKey: process.env.VMAOS_SECRET_KEY, logger });
+  return createOpenApiClient({ baseUrl: process.env.OPENAPI_BASE_URL,
+    accessKey: process.env.OPENAPI_ACCESS_KEY, secretKey: process.env.OPENAPI_SECRET_KEY, logger });
 }
 
 export function reportError(error) {

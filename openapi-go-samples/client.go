@@ -62,7 +62,7 @@ func loadConfig(path string, lookup func(string) (string, bool)) (map[string]str
 		}
 		values[strings.TrimSpace(key)] = value
 	}
-	for _, key := range []string{"VMAOS_BASE_URL", "VMAOS_ACCESS_KEY", "VMAOS_SECRET_KEY"} {
+	for _, key := range []string{"OPENAPI_BASE_URL", "OPENAPI_ACCESS_KEY", "OPENAPI_SECRET_KEY"} {
 		if value, ok := lookup(key); ok {
 			values[key] = value
 		}
@@ -79,7 +79,7 @@ func newClient(base, ak, sk string, log func(any)) (*Client, error) {
 	}
 	local := origin.Hostname() == "127.0.0.1" || origin.Hostname() == "localhost" || origin.Hostname() == "::1"
 	if (origin.Scheme != "https" && !(origin.Scheme == "http" && local)) || origin.Host == "" || origin.User != nil || origin.RawQuery != "" || origin.Fragment != "" || (origin.Path != "" && origin.Path != "/") {
-		return nil, errors.New("VMAOS_BASE_URL 必须为 HTTPS origin（本机可用 HTTP）")
+		return nil, errors.New("OPENAPI_BASE_URL 必须为 HTTPS origin（本机可用 HTTP）")
 	}
 	if ak == "" || strings.ContainsAny(ak, " \t\r\n") || sk == "" {
 		return nil, errors.New("请配置 AK/SK")
@@ -133,7 +133,7 @@ func redact(value any) any {
 		for key, child := range v {
 			normalized := strings.ToLower(strings.NewReplacer("-", "", "_", "").Replace(key))
 			switch normalized {
-			case "ak", "sk", "accesskey", "accesskeyid", "accesskeysecret", "secretkey", "secretaccesskey", "sessiontoken", "token", "password", "secret", "signature", "authorization", "xvmaosaccesskey", "xvmaossignature":
+			case "ak", "sk", "accesskey", "accesskeyid", "accesskeysecret", "secretkey", "secretaccesskey", "sessiontoken", "token", "password", "secret", "signature", "authorization", "xapiaccesskey", "xapisignature":
 				out[key] = "[REDACTED]"
 			default:
 				out[key] = redact(child)
@@ -182,10 +182,10 @@ func (c *Client) Post(ctx context.Context, path string, data any) (json.RawMessa
 		return nil, errors.New("无法创建请求")
 	}
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("X-VMAOS-Algorithm", "HMAC-SHA-256")
-	request.Header.Set("X-VMAOS-Access-Key", c.AK)
-	request.Header.Set("X-VMAOS-Timestamp", timestamp)
-	request.Header.Set("X-VMAOS-Signature", signed)
+	request.Header.Set("X-API-Algorithm", "HMAC-SHA-256")
+	request.Header.Set("X-API-Access-Key", c.AK)
+	request.Header.Set("X-API-Timestamp", timestamp)
+	request.Header.Set("X-API-Signature", signed)
 	c.emit(map[string]any{"event": "request", "method": "POST", "path": path, "body": json.RawMessage(body)})
 	started := time.Now()
 	response, err := c.HTTP.Do(request)

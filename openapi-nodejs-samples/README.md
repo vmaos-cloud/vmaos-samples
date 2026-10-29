@@ -1,4 +1,4 @@
-# VMAOS OpenAPI 示例（Node.js）
+# OpenAPI 示例（Node.js）
 
 其他语言：[Java](../openapi-java-samples/README.md)、[Go](../openapi-go-samples/README.md)。
 
@@ -9,10 +9,10 @@
 
 ## 准备
 
-需要 Node.js 24.15.0 或更高版本。AK/SK 从 VMAOS Manage 获取，并配置调用服务器的出口 IP 白名单及权限。系统时钟应准确。
+需要 Node.js 24.15.0 或更高版本。AK/SK 从 Manage 获取，并配置调用服务器的出口 IP 白名单及权限。系统时钟应准确。在教程代码根目录运行：
 
 ```bash
-cd vmaos-samples/openapi-nodejs-samples
+cd openapi-nodejs-samples
 npm ci
 cp .env.example .env
 ```
@@ -20,12 +20,12 @@ cp .env.example .env
 编辑 `.env`：
 
 ```dotenv
-VMAOS_BASE_URL=https://你的OpenAPI域名
-VMAOS_ACCESS_KEY=你的AK
-VMAOS_SECRET_KEY=你的SK
+OPENAPI_BASE_URL=https://openapi.sample.com
+OPENAPI_ACCESS_KEY=你的AK
+OPENAPI_SECRET_KEY=你的SK
 ```
 
-Base URL 从 Manage 的 OpenAPI 概览确认，只填写 origin（协议、域名、可选端口），不要填写 Manage 地址或 `/open-api` 路径。示例中的 `openapi.example.com` 是占位地址。AK/SK 只在业务服务器使用，不放到网页、App、URL、日志或 Git 中；`.env` 已被忽略。
+Base URL 从 Manage 的 OpenAPI 概览确认，只填写 origin（协议、域名、可选端口），不要填写 Manage 地址或 `/open-api` 路径。示例中的 `openapi.sample.com` 是占位地址。AK/SK 只在业务服务器使用，不放到网页、App、URL、日志或 Git 中；`.env` 已被忽略。
 
 ## 1. 查询板卡
 
@@ -169,7 +169,7 @@ application/json
 <请求体原始字节的SHA-256小写十六进制>
 ```
 
-将 HMAC 结果编码为 64 位小写十六进制，放入 `X-VMAOS-Signature`；同时发送 `X-VMAOS-Algorithm`、`X-VMAOS-Access-Key`、`X-VMAOS-Timestamp`。三个示例接口均无 URL 查询参数，路径为固定 ASCII 路径。签名客户端限定这些接口，不是通用 OpenAPI SDK。
+将 HMAC 结果编码为 64 位小写十六进制，放入 `X-API-Signature`；同时发送 `X-API-Algorithm`、`X-API-Access-Key`、`X-API-Timestamp`。三个示例接口均无 URL 查询参数，路径为固定 ASCII 路径。签名客户端限定这些接口，不是通用 OpenAPI SDK。
 
 注意：请求体摘要用于请求验签；上传参数 `sha256` 则是完整文件摘要，两者输入不同。错误输出保留 HTTP 状态、业务码和 traceId，可在 Manage 对照错误信息排查；输出 STS 响应时会隐藏临时凭证。
 

@@ -1,4 +1,4 @@
-module github.com/vmaos-cloud/vmaos-samples/openapi-go-samples
+module example.com/samples/openapi-go-samples
 
 go 1.24.0
 

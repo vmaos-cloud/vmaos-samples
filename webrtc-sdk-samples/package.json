@@ -1,0 +1,20 @@
+{
+  "name": "webrtc-sdk-samples",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.4.1",
+  "engines": {
+    "node": ">=24.15.0"
+  },
+  "scripts": {
+    "install:demos": "node scripts/run-demos.mjs install",
+    "build": "node scripts/run-demos.mjs run build",
+    "test": "node scripts/run-demos.mjs run test",
+    "verify:browser": "node scripts/verify-browser.mjs",
+    "dev": "node scripts/dev.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}
