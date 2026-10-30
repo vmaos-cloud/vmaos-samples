@@ -1,5 +1,7 @@
+import { createControlledSdk } from "./control.js";
 import { createApp, h, ref, onMounted, onUnmounted } from "vue";
-import { WebRtcSdk } from "@vmaos/webrtc-sdk";
+import * as SDK from "@vmaos/webrtc-sdk";
+const { WebRtcSdk } = SDK;
 import { parseTicket } from "./ticket.js";
 import { mountCameraControls } from "./camera.js";
 import "./style.css";
@@ -10,13 +12,13 @@ createApp({
     let sdk, cameraCleanup;
     function disconnect() { cameraCleanup?.(); cameraCleanup = undefined; const current = sdk; sdk = undefined; current?.destroy(); text.value = ""; busy.value = false; connected.value = false; status.value = "已断开，请获取新的票据"; }
     const hide = () => { if (sdk) disconnect(); };
-    const visibility = () => { if (document.hidden) hide(); };
+    const visibility = () => { if (document.hidden) sdk?.cancelInput(); };
     onMounted(() => { window.addEventListener("pagehide", hide); document.addEventListener("visibilitychange", visibility); });
     onUnmounted(() => { window.removeEventListener("pagehide", hide); document.removeEventListener("visibilitychange", visibility); disconnect(); });
     function connect() {
       try {
         const config = parseTicket(text.value); disconnect();
-        const current = new WebRtcSdk({ mountedElement: mount.value, connectConfig: config, enabledIMEKeyboard: true });
+        const current = createControlledSdk(SDK, { mountedElement: mount.value, connectConfig: config, enabledIMEKeyboard: true });
         sdk = current; cameraCleanup = mountCameraControls(WebRtcSdk, current, cameraHost.value); busy.value = true; status.value = "正在连接…";
         current.on(WebRtcSdk.EVENTS.CONNECTED, () => { if (sdk === current) { connected.value = true; status.value = "已连接，可点击画面或使用键盘"; } });
         current.on(WebRtcSdk.EVENTS.ERROR, () => { if (sdk === current) { disconnect(); status.value = "连接失败，请检查网络与云机状态并获取新票据"; } });

@@ -10,8 +10,8 @@
   "scripts": {
     "start": "node --env-file-if-exists=.env server.mjs",
     "test": "node --test test/server.test.mjs",
-    "check": "node --check server.mjs && node --check public/main.js && node --check public/preview.js",
-    "test:browser": "node --test test/browser.test.mjs test/real-sdk-browser.test.mjs"
+    "check": "node --check server.mjs && node --check public/main.js && node --check public/preview.js && node --check public/control.js && node --check public/camera.js",
+    "test:browser": "node --test test/browser.test.mjs test/real-sdk-browser.test.mjs test/preview-browser.test.mjs"
   },
   "dependencies": {
     "@vmaos/webrtc-sdk": "0.3.0"

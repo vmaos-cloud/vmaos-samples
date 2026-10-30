@@ -41,7 +41,7 @@ test('installed SDK drives group actions and releases transports on switching an
       constructor() {
         state.peers.push(this); this.closed = false;
         const channel = this.channel = { readyState: 'open', send(value) { state.actions.push(JSON.parse(new TextDecoder().decode(value))); }, close() { this.readyState = 'closed'; } };
-        queueMicrotask(() => this.ondatachannel?.({ channel }));
+        queueMicrotask(() => { this.ondatachannel?.({ channel }); this.iceConnectionState='connected'; this.oniceconnectionstatechange?.(); });
       }
       addTransceiver() { return { sender: { track: null, replaceTrack: async () => {} } }; }
       close() { this.closed = true; }
@@ -57,20 +57,50 @@ test('installed SDK drives group actions and releases transports on switching an
   await page.getByRole('button', { name: '连接并查询云机' }).click();
   for (const phone of phones) await page.locator('#phones tr').filter({ hasText: phone.phoneCode }).getByRole('checkbox').check();
   await page.getByRole('button', { name: '群控所选云机' }).click();
-  await page.waitForFunction(() => window.transportTest.sockets.some(socket => socket.rooms?.length === 2) && window.transportTest.peers.length === 1);
+  await page.waitForFunction(() => window.transportTest.sockets.some(socket => socket.rooms?.length === 2) && window.transportTest.peers.length === 1 && document.getElementById('primary-status').textContent === '已连接');
   await page.getByRole('button', { name: '主页', exact: true }).click();
   await page.waitForFunction(() => window.transportTest.groupActions.length === 1 && window.transportTest.actions.some(action => action.type === 'ActionInput'));
   assert.deepEqual(await page.evaluate(() => window.transportTest.groupActions[0].rooms.sort()), ['P2', 'P3']);
   const actions = await page.evaluate(() => ({ primary: window.transportTest.actions.find(action => action.type === 'ActionInput'), follower: window.transportTest.groupActions[0].action }));
   assert.equal(JSON.parse(actions.primary.data).keyCode, 3);
   assert.equal(JSON.parse(actions.follower.data).keyCode, 3);
+  await page.evaluate(() => {
+    const host=document.getElementById('primary'); host.dispatchEvent(new PointerEvent('pointerenter'));
+    const input=host.querySelector('[aria-label="云机键盘输入"]'), clipboard=new DataTransfer();
+    clipboard.setData('text/plain','群控粘贴\n第二行'); input.dispatchEvent(new ClipboardEvent('paste',{clipboardData:clipboard,cancelable:true,bubbles:true}));
+    input.dispatchEvent(new CompositionEvent('compositionstart'));
+    input.dispatchEvent(new CompositionEvent('compositionend',{data:'中文输入'}));
+    input.value='中文输入'; input.dispatchEvent(new InputEvent('input',{data:'中文输入'}));
+  });
+  await page.waitForFunction(() => window.transportTest.actions.filter(action=>action.type==='ActionChinese').length===2 && window.transportTest.groupActions.filter(entry=>entry.action.type==='ActionChinese').length===2);
+  const texts=await page.evaluate(()=>({main:window.transportTest.actions.filter(a=>a.type==='ActionChinese').map(a=>JSON.parse(a.data).text),followers:window.transportTest.groupActions.filter(a=>a.action.type==='ActionChinese').map(a=>JSON.parse(a.action.data).text)}));
+  assert.deepEqual(texts.main,['群控粘贴\n第二行','中文输入']); assert.deepEqual(texts.main,texts.followers);
+  await page.evaluate(()=>{
+    const video=document.querySelector('#primary video');
+    Object.defineProperty(video,'videoWidth',{value:360}); Object.defineProperty(video,'videoHeight',{value:640});
+    video.getBoundingClientRect=()=>({left:0,top:0,width:360,height:640});
+    video.setPointerCapture=()=>{}; video.hasPointerCapture=()=>false;
+    video.dispatchEvent(new PointerEvent('pointerdown',{pointerId:7,pointerType:'mouse',button:0,clientX:180,clientY:320,bubbles:true,cancelable:true}));
+    window.dispatchEvent(new Event('blur'));
+  });
+  await page.waitForFunction(()=>window.transportTest.groupActions.filter(a=>a.action.type==='ClickData').length===2);
+  const touch=await page.evaluate(()=>window.transportTest.groupActions.filter(a=>a.action.type==='ClickData').map(a=>JSON.parse(a.action.data).action));
+  assert.deepEqual(touch,[0,1]);
+  // Selection updates only follower sockets, keeping the established main peer.
+  await page.locator('.tile').filter({has:page.getByText('P3',{exact:true})}).getByRole('checkbox').uncheck();
+  await page.waitForFunction(()=>window.transportTest.sockets.some(socket=>socket.rooms?.length===1&&socket.rooms[0]==='P2'&&socket.readyState===1));
+  assert.equal(await page.evaluate(()=>window.transportTest.peers.length),1);
   const second = page.locator('.tile').filter({ has: page.getByText('P2', { exact: true }) });
   await second.getByRole('button', { name: '设为主控' }).click();
   await page.waitForFunction(() => document.getElementById('primary-name').textContent === 'P2' && window.transportTest.peers.length === 2);
   assert.equal(await page.evaluate(() => window.transportTest.peers[0].closed), true);
   await page.locator('#sync').uncheck();
-  await page.waitForFunction(() => window.transportTest.peers.length === 3);
+  assert.equal(await page.evaluate(() => window.transportTest.peers.length), 2);
   assert(calls.some(call => call.path.endsWith('/connection-ticket') && call.body.phoneCode === 'P2'));
+  const peers = await page.evaluate(() => window.transportTest.peers.length);
+  await page.getByRole('button', { name: '重试从控', exact: true }).click();
+  await page.waitForTimeout(50);
+  assert.equal(await page.evaluate(() => window.transportTest.peers.length), peers);
   const priorGroupActions = await page.evaluate(() => window.transportTest.groupActions.length);
   const priorPrimaryActions = await page.evaluate(() => window.transportTest.actions.filter(action => action.type === 'ActionInput').length);
   await page.getByRole('button', { name: '主页', exact: true }).click();

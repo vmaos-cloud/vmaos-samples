@@ -1,4 +1,6 @@
-const { WebRtcSdk } = window.WebRTCSDK;
+import { createControlledSdk } from "./control.js";
+const SDK = window.WebRTCSDK;
+const { WebRtcSdk } = SDK;
 import { parseTicket } from "./ticket.js";
 import { mountCameraControls } from "./camera.js";
 import "./style.css";
@@ -16,7 +18,7 @@ document.querySelector("#connect").onclick = () => {
   try {
     const config = parseTicket(input.value);
     disconnect();
-    const current = new WebRtcSdk({ mountedElement: "#device", connectConfig: config, enabledIMEKeyboard: true });
+    const current = createControlledSdk(SDK, { mountedElement: "#device", connectConfig: config, enabledIMEKeyboard: true });
     sdk = current; cameraCleanup = mountCameraControls(WebRtcSdk, current, document.querySelector("#camera-controls")); state("正在连接…", true);
     current.on(WebRtcSdk.EVENTS.CONNECTED, () => { if (sdk === current) state("已连接，可点击画面或使用键盘", true, true); });
     current.on(WebRtcSdk.EVENTS.ERROR, () => { if (sdk === current) { disconnect(); state("连接失败，请检查网络与云机状态并获取新票据"); } });
@@ -27,5 +29,5 @@ document.querySelector("#connect").onclick = () => {
 document.querySelector("#disconnect").onclick = disconnect;
 document.querySelectorAll("[data-action]").forEach(button => button.onclick = () => sdk?.[button.dataset.action]());
 window.addEventListener("pagehide", disconnect);
-document.addEventListener("visibilitychange", () => { if (document.hidden && sdk) disconnect(); });
+
 if (import.meta.hot) import.meta.hot.dispose(disconnect);

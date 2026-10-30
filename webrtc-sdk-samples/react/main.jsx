@@ -1,6 +1,8 @@
+import { createControlledSdk } from "./control.js";
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { WebRtcSdk } from "@vmaos/webrtc-sdk";
+import * as SDK from "@vmaos/webrtc-sdk";
+const { WebRtcSdk } = SDK;
 import { parseTicket } from "./ticket.js";
 import { mountCameraControls } from "./camera.js";
 import "./style.css";
@@ -11,14 +13,14 @@ function Demo() {
   function disconnect() { dispose(); setText(""); setBusy(false); setConnected(false); setStatus("已断开，请获取新的票据"); }
   useEffect(() => {
     const hide = () => { if (instance.current) disconnect(); };
-    const visibility = () => { if (document.hidden) hide(); };
+    const visibility = () => { if (document.hidden) instance.current?.cancelInput(); };
     window.addEventListener("pagehide", hide); document.addEventListener("visibilitychange", visibility);
     return () => { window.removeEventListener("pagehide", hide); document.removeEventListener("visibilitychange", visibility); dispose(); };
   }, []);
   function connect() {
     try {
       const config = parseTicket(text); disconnect();
-      const current = new WebRtcSdk({ mountedElement: mount.current, connectConfig: config, enabledIMEKeyboard: true });
+      const current = createControlledSdk(SDK, { mountedElement: mount.current, connectConfig: config, enabledIMEKeyboard: true });
       instance.current = current; cameraCleanup.current = mountCameraControls(WebRtcSdk, current, cameraHost.current); setBusy(true); setStatus("正在连接…");
       current.on(WebRtcSdk.EVENTS.CONNECTED, () => { if (instance.current === current) { setConnected(true); setStatus("已连接，可点击画面或使用键盘"); } });
       current.on(WebRtcSdk.EVENTS.ERROR, () => { if (instance.current === current) { disconnect(); setStatus("连接失败，请检查网络与云机状态并获取新票据"); } });

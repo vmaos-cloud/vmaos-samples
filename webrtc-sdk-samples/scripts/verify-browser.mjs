@@ -14,9 +14,9 @@ try {
   const server = createServer(async (req,res) => {
    try {
     const pathname = req.url.split('?')[0];
-    if (pathname === '/__verify/camera.js' || pathname === '/__verify/sdk.js') {
+    if (pathname === '/__verify/control.js' || pathname === '/__verify/camera.js' || pathname === '/__verify/sdk.js') {
      const require = createRequire(resolve(root, name, 'package.json'));
-     const path = pathname.endsWith('camera.js') ? resolve(root, name, 'camera.js') : resolve(dirname(require.resolve('@vmaos/webrtc-sdk')), 'browser.iife.js');
+     const path = pathname.endsWith('sdk.js') ? resolve(dirname(require.resolve('@vmaos/webrtc-sdk')), 'browser.iife.js') : resolve(root, name, pathname.endsWith('camera.js') ? 'camera.js' : 'control.js');
      res.setHeader('Content-Type', 'text/javascript'); res.end(await readFile(path)); return;
     }
     const path = resolve(dir, '.' + (req.url === '/' ? '/index.html' : req.url.split('?')[0]));
@@ -87,8 +87,81 @@ try {
    check(host.childElementCount === 0 && sdk.listenerCount(Sdk.EVENTS.CAMERA_STATE_CHANGED) === 0 && sdk.listenerCount(Sdk.EVENTS.CAMERA_ERROR) === 0, 'Camera listeners removed');
    sdk.destroy(); host.remove();
   });
+  await page.evaluate(async () => {
+   const { createControlledSdk } = await import('/__verify/control.js');
+   const api = window.WebRTCSDK, events = [], mirrored = [];
+   const host = document.createElement('div'); host.style.cssText = 'position:fixed;inset:0;width:360px;height:640px'; document.body.append(host);
+   const originalStart = api.WebRtcClient.prototype.startConnection;
+   const originalSend = api.WebRtcClient.prototype.sendChannelData;
+   api.WebRtcClient.prototype.startConnection = function () {};
+   api.WebRtcClient.prototype.sendChannelData = function (type,data) { events.push({type,data}); return true; };
+   let sdk;
+   const check = (ok,label) => { if (!ok) throw new Error(label); };
+   try {
+    sdk = createControlledSdk(api, {mountedElement:host,connectConfig:{signalServerUrl:'wss://signal.example',roomId:'P1',token:'test-only',hostTurn:[]}}, (type,data) => mirrored.push({type,data}));
+    sdk.init(); sdk.emit(api.WebRtcSdk.EVENTS.CONNECTED);
+    const video = host.querySelector('video');
+    Object.defineProperty(video,'videoWidth',{value:360}); Object.defineProperty(video,'videoHeight',{value:640});
+    video.getBoundingClientRect = () => ({left:0,top:0,width:360,height:640});
+    video.setPointerCapture = () => {}; video.hasPointerCapture = () => false;
+    host.dispatchEvent(new PointerEvent('pointerenter'));
+    const input = host.querySelector('[aria-label="云机键盘输入"]');
+    check(document.activeElement === input, 'Cloud screen owns input focus');
+    const clip = new DataTransfer(); clip.setData('text/plain','你好\nclipboard');
+    const paste = new ClipboardEvent('paste',{clipboardData:clip,cancelable:true,bubbles:true}); input.dispatchEvent(paste);
+    check(paste.defaultPrevented, 'Paste default suppressed');
+    check(events.length === 1 && events[0].data.text === '你好\nclipboard', 'Paste sent once');
+    input.dispatchEvent(new CompositionEvent('compositionstart'));
+    input.value = '中文'; input.dispatchEvent(new InputEvent('input',{data:'中文',isComposing:true}));
+    check(events.length === 1, 'Composition intermediate text ignored');
+    input.dispatchEvent(new CompositionEvent('compositionend',{data:'中文'}));
+    input.value = '中文'; input.dispatchEvent(new InputEvent('input',{data:'中文'}));
+    check(events.length === 2, 'Composition committed once');
+    input.dispatchEvent(new KeyboardEvent('keydown',{code:'Backspace',key:'Backspace',bubbles:true,cancelable:true}));
+    check(events.at(-1).data.keyCode === 67, 'Backspace forwarded');
+    const before = events.length;
+    input.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyV',key:'v',ctrlKey:true,bubbles:true}));
+    input.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyV',key:'v',metaKey:true,bubbles:true}));
+    check(events.length === before, 'Paste shortcuts do not forward physical key');
+    video.dispatchEvent(new PointerEvent('pointerdown',{pointerId:1,pointerType:'mouse',button:0,clientX:180,clientY:320,bubbles:true,cancelable:true}));
+    check(events.at(-1).data.action === 0 && events.at(-1).data.x === .5 && events.at(-1).data.y === .5, 'Normalized touch sent once');
+    const moves = events.length;
+    window.dispatchEvent(new Event('blur'));
+    check(events.length === moves+1 && events.at(-1).data.action === 1, 'Blur releases touch');
+    const blurredCount = events.length;
+    input.dispatchEvent(new CompositionEvent('compositionend',{data:'迟到输入'}));
+    input.dispatchEvent(new InputEvent('input',{data:'迟到输入'}));
+    check(events.length === blurredCount, 'Late input after blur is ignored');
+    host.dispatchEvent(new PointerEvent('pointerenter'));
+    video.dispatchEvent(new PointerEvent('pointerdown',{pointerId:2,pointerType:'mouse',button:0,clientX:100,clientY:100,bubbles:true,cancelable:true}));
+    video.dispatchEvent(new PointerEvent('pointercancel',{pointerId:2,bubbles:true,cancelable:true}));
+    check(events.at(-1).data.action === 1 && events.at(-1).data.x === 100/360, 'Canceled touch released at last position');
+    check(events.length === mirrored.length, 'Main and follower input payloads agree');
+    sdk.destroy(); const count = events.length;
+    input.dispatchEvent(new ClipboardEvent('paste',{clipboardData:clip,cancelable:true,bubbles:true}));
+    check(events.length === count && !host.children.length, 'Disposed session consumes no input');
+   } finally { sdk?.destroy(); host.remove(); api.WebRtcClient.prototype.startConnection=originalStart; api.WebRtcClient.prototype.sendChannelData=originalSend; }
+  });
+  await context.grantPermissions(['clipboard-read','clipboard-write']);
+  await page.evaluate(async () => {
+   const { createControlledSdk }=await import('/__verify/control.js'), api=window.WebRTCSDK;
+   const host=document.createElement('div');document.body.append(host);
+   const originalStart=api.WebRtcClient.prototype.startConnection, originalSend=api.WebRtcClient.prototype.sendChannelData;
+   const sent=[];
+   api.WebRtcClient.prototype.startConnection=function(){};
+   api.WebRtcClient.prototype.sendChannelData=function(type,data){sent.push({type,data});return true;};
+   const sdk=createControlledSdk(api,{mountedElement:host,connectConfig:{signalServerUrl:'wss://signal.example',roomId:'P1',token:'test-only',hostTurn:[]}});
+   sdk.init();sdk.emit(api.WebRtcSdk.EVENTS.CONNECTED);host.dispatchEvent(new PointerEvent('pointerenter'));
+   window.pasteVerification={sent,cleanup(){sdk.destroy();host.remove();api.WebRtcClient.prototype.startConnection=originalStart;api.WebRtcClient.prototype.sendChannelData=originalSend;}};
+   await navigator.clipboard.writeText('实际 Ctrl+V\n你好');
+  });
+  try {
+   await page.keyboard.press('Control+V');
+   await page.waitForFunction(()=>window.pasteVerification.sent.filter(event=>event.type==='ActionChinese').length===1);
+   assert.equal(await page.evaluate(()=>window.pasteVerification.sent.find(event=>event.type==='ActionChinese').data.text),'实际 Ctrl+V\n你好');
+  } finally { await page.evaluate(()=>{window.pasteVerification.cleanup();delete window.pasteVerification;}); }
   assert.deepEqual(errors,[]);
-  console.log(`${name}: camera state/retry/switch/stop/error/cleanup passed; rendered security guidance; invalid/expired/AK-SK rejected; SDK initialized/destroyed; no browser storage/OpenAPI calls; mobile fits`);
+  console.log(`${name}: paste/IME/key/touch/blur/cleanup and camera state/retry/switch/stop/error passed; rendered security guidance; invalid/expired/AK-SK rejected; SDK initialized/destroyed; no browser storage/OpenAPI calls; mobile fits`);
   await context.close();
  }
 } finally { await browser.close(); await Promise.all(servers.map(server => new Promise(resolve => server.close(resolve)))); }
