@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { resolve, extname, dirname } from 'node:path';
+import { resolve, extname, dirname, sep } from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
@@ -14,13 +14,13 @@ try {
   const server = createServer(async (req,res) => {
    try {
     const pathname = req.url.split('?')[0];
-    if (pathname === '/__verify/control.js' || pathname === '/__verify/camera.js' || pathname === '/__verify/sdk.js') {
+    if (['/__verify/control.js', '/__verify/camera.js', '/__verify/clipboard.js', '/__verify/sdk.js'].includes(pathname)) {
      const require = createRequire(resolve(root, name, 'package.json'));
-     const path = pathname.endsWith('sdk.js') ? resolve(dirname(require.resolve('@vmaos/webrtc-sdk')), 'browser.iife.js') : resolve(root, name, pathname.endsWith('camera.js') ? 'camera.js' : 'control.js');
+     const path = pathname.endsWith('sdk.js') ? resolve(dirname(require.resolve('@vmaos/webrtc-sdk')), 'browser.iife.js') : resolve(root, name, pathname.split('/').at(-1));
      res.setHeader('Content-Type', 'text/javascript'); res.end(await readFile(path)); return;
     }
     const path = resolve(dir, '.' + (req.url === '/' ? '/index.html' : req.url.split('?')[0]));
-    if (!path.startsWith(dir + '/')) throw new Error('outside root');
+    if (!path.startsWith(dir + sep)) throw new Error('outside root');
     const body = await readFile(path);
     res.setHeader('Content-Type', { '.html':'text/html', '.js':'text/javascript', '.css':'text/css', '.png':'image/png' }[extname(path)] || 'application/octet-stream'); res.end(body);
    } catch { res.statusCode = 404; res.end(); }
@@ -158,7 +158,7 @@ try {
   try {
    await page.keyboard.press('Control+V');
    await page.waitForFunction(()=>window.pasteVerification.sent.filter(event=>event.type==='ActionChinese').length===1);
-   assert.equal(await page.evaluate(()=>window.pasteVerification.sent.find(event=>event.type==='ActionChinese').data.text),'实际 Ctrl+V\n你好');
+   assert.equal(await page.evaluate(()=>window.pasteVerification.sent.find(event=>event.type==='ActionChinese').data.text.replace(/\r\n/g, '\n')),'实际 Ctrl+V\n你好');
   } finally { await page.evaluate(()=>{window.pasteVerification.cleanup();delete window.pasteVerification;}); }
   assert.deepEqual(errors,[]);
   console.log(`${name}: paste/IME/key/touch/blur/cleanup and camera state/retry/switch/stop/error passed; rendered security guidance; invalid/expired/AK-SK rejected; SDK initialized/destroyed; no browser storage/OpenAPI calls; mobile fits`);

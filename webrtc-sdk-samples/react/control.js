@@ -1,8 +1,10 @@
+import { mountCloudClipboard } from "./clipboard.js";
 // Tutorial input adapter built only from the public SDK API.
 // Keep this file beside the demo when copying it into a separate project.
 export function createControlledSdk(api, options, onAction = () => {}) {
   const host = typeof options.mountedElement === 'string' ? document.querySelector(options.mountedElement) : options.mountedElement;
   let ready = false, focused = false, disposed = false, client, gesture, composing = false, committed;
+  let clipboardCleanup;
   const input = document.createElement('textarea');
   input.setAttribute('aria-label', '云机键盘输入');
   input.autocomplete = 'off'; input.autocapitalize = 'off'; input.spellcheck = false;
@@ -51,7 +53,9 @@ export function createControlledSdk(api, options, onAction = () => {}) {
   }
   const sdk = new api.WebRtcSdk({ ...options, disabled: true, enabledIMEKeyboard: false }, {
     clientFactory(config) {
+      clipboardCleanup?.();
       client = new api.WebRtcClient(config);
+      clipboardCleanup = mountCloudClipboard(api, client);
       const original = client.sendChannelData.bind(client);
       client.sendChannelData = (type, data) => {
         if ([api.ChannelDataType.ClickData, api.ChannelDataType.ActionInput, api.ChannelDataType.ActionChinese].includes(type)) {
@@ -66,7 +70,7 @@ export function createControlledSdk(api, options, onAction = () => {}) {
     },
   });
   const connected = () => { ready = true; };
-  const disconnected = () => { blur(); ready = false; };
+  const disconnected = () => { blur(); ready = false; clipboardCleanup?.(); };
   sdk.on(api.WebRtcSdk.EVENTS.CONNECTED, connected);
   sdk.on(api.WebRtcSdk.EVENTS.ERROR, disconnected);
   sdk.on(api.WebRtcSdk.EVENTS.STOP_CONNECT, disconnected);
@@ -105,7 +109,7 @@ export function createControlledSdk(api, options, onAction = () => {}) {
   sdk.cancelInput = blur;
   sdk.destroy = () => {
     if (disposed) return;
-    blur(); ready = false; disposed = true;
+    blur(); ready = false; disposed = true; clipboardCleanup?.();
     for (const remove of listeners) remove();
     sdk.off(api.WebRtcSdk.EVENTS.CONNECTED, connected);
     sdk.off(api.WebRtcSdk.EVENTS.ERROR, disconnected);

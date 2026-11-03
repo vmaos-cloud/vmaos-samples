@@ -90,10 +90,26 @@ test('installed SDK drives group actions and releases transports on switching an
   await page.locator('.tile').filter({has:page.getByText('P3',{exact:true})}).getByRole('checkbox').uncheck();
   await page.waitForFunction(()=>window.transportTest.sockets.some(socket=>socket.rooms?.length===1&&socket.rooms[0]==='P2'&&socket.readyState===1));
   assert.equal(await page.evaluate(()=>window.transportTest.peers.length),1);
+  // Remote copy comes from the primary data channel and is never mirrored.
+  const groupActionsBeforeCopy = await page.evaluate(() => window.transportTest.groupActions.length);
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined });
+    document.addEventListener('copy', event => { window.copiedCloudText = event.clipboardData.getData('text/plain'); });
+    window.transportTest.peers[0].channel.onmessage({ data: JSON.stringify({ type: 'CloudClipData', data: '主控文字\nhello 😀' }) });
+  });
+  await page.getByRole('button', { name: '查看文字', exact: true }).click();
+  assert.equal(await page.getByRole('textbox', { name: '云机复制的文字' }).inputValue(), '主控文字\nhello 😀');
+  await page.getByRole('button', { name: '复制到本机', exact: true }).click();
+  await page.getByText('已复制到本机', { exact: true }).waitFor();
+  assert.equal(await page.evaluate(() => window.copiedCloudText), '主控文字\nhello 😀');
+  assert.equal(await page.evaluate(() => window.transportTest.groupActions.length), groupActionsBeforeCopy);
   const second = page.locator('.tile').filter({ has: page.getByText('P2', { exact: true }) });
   await second.getByRole('button', { name: '设为主控' }).click();
   await page.waitForFunction(() => document.getElementById('primary-name').textContent === 'P2' && window.transportTest.peers.length === 2);
   assert.equal(await page.evaluate(() => window.transportTest.peers[0].closed), true);
+  assert.equal(await page.locator('[data-cloud-clipboard]').count(), 0);
+  await page.evaluate(() => window.transportTest.peers[0].channel.onmessage?.({ data: JSON.stringify({ type: 'CloudClipData', data: '旧主控文字' }) }));
+  assert.equal(await page.locator('[data-cloud-clipboard]').count(), 0);
   await page.locator('#sync').uncheck();
   assert.equal(await page.evaluate(() => window.transportTest.peers.length), 2);
   assert(calls.some(call => call.path.endsWith('/connection-ticket') && call.body.phoneCode === 'P2'));
