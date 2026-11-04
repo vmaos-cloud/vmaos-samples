@@ -13,7 +13,8 @@
     "test": "node scripts/run-demos.mjs run test",
     "verify:browser": "node scripts/verify-browser.mjs",
     "dev": "node scripts/dev.mjs",
-    "verify:clipboard": "node scripts/verify-clipboard.mjs"
+    "verify:clipboard": "node scripts/verify-clipboard.mjs",
+    "verify:navigation": "node scripts/verify-navigation.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0"

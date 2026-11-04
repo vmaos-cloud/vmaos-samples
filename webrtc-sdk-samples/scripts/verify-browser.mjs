@@ -32,6 +32,10 @@ try {
   page.on('request', req => requests.push(req.url())); page.on('pageerror', error => errors.push(error.message));
   await page.goto(`http://127.0.0.1:${port}/`);
   await page.getByText(/AK\/SK 不能放到前端项目中/).waitFor();
+  const nav = page.getByRole('navigation',{name:'云机导航'});
+  assert.deepEqual(await nav.locator(':scope > button').evaluateAll(buttons=>buttons.map(button=>button.getAttribute('aria-label'))),['最近任务','Home','返回','更多功能']);
+  assert.equal(await nav.locator('button:not([disabled])').count(),0);
+  assert.equal(await nav.getByRole('menu').count(),0);
   const input = page.getByLabel('OpenAPI 结果 JSON'), connect = page.getByRole('button', { name:'连接云机' });
   await input.fill('invalid json'); await connect.click();
   await page.getByRole('status').filter({hasText:'请输入有效的 OpenAPI 结果 JSON'}).waitFor();
@@ -93,13 +97,14 @@ try {
    const host = document.createElement('div'); host.style.cssText = 'position:fixed;inset:0;width:360px;height:640px'; document.body.append(host);
    const originalStart = api.WebRtcClient.prototype.startConnection;
    const originalSend = api.WebRtcClient.prototype.sendChannelData;
-   api.WebRtcClient.prototype.startConnection = function () {};
+   let inputClient;
+   api.WebRtcClient.prototype.startConnection = function () { inputClient = this; };
    api.WebRtcClient.prototype.sendChannelData = function (type,data) { events.push({type,data}); return true; };
    let sdk;
    const check = (ok,label) => { if (!ok) throw new Error(label); };
    try {
     sdk = createControlledSdk(api, {mountedElement:host,connectConfig:{signalServerUrl:'wss://signal.example',roomId:'P1',token:'test-only',hostTurn:[]}}, (type,data) => mirrored.push({type,data}));
-    sdk.init(); sdk.emit(api.WebRtcSdk.EVENTS.CONNECTED);
+    sdk.init(); inputClient.emit(api.EmitType.iceConnectionState,'connected');
     const video = host.querySelector('video');
     Object.defineProperty(video,'videoWidth',{value:360}); Object.defineProperty(video,'videoHeight',{value:640});
     video.getBoundingClientRect = () => ({left:0,top:0,width:360,height:640});
@@ -136,11 +141,70 @@ try {
     video.dispatchEvent(new PointerEvent('pointerdown',{pointerId:2,pointerType:'mouse',button:0,clientX:100,clientY:100,bubbles:true,cancelable:true}));
     video.dispatchEvent(new PointerEvent('pointercancel',{pointerId:2,bubbles:true,cancelable:true}));
     check(events.at(-1).data.action === 1 && events.at(-1).data.x === 100/360, 'Canceled touch released at last position');
+    check(sdk.volumeUp() === true, 'Volume-up send accepted');
+    check(events.at(-1).type === 'ActionInput' && events.at(-1).data.keyCode === 24 && events.at(-1).data.meta === 0, 'Cloud volume-up key');
+    check(sdk.volumeDown() === true, 'Volume-down send accepted');
+    check(events.at(-1).type === 'ActionInput' && events.at(-1).data.keyCode === 25 && events.at(-1).data.meta === 0, 'Cloud volume-down key');
+    const beforeIceLoss = events.length;
+    inputClient.emit(api.EmitType.iceConnectionState, 'disconnected');
+    check(sdk.volumeUp() === false && events.length === beforeIceLoss, 'ICE-disconnected volume does not buffer');
+    inputClient.emit(api.EmitType.iceConnectionState, 'connected');
+    check(events.length === beforeIceLoss, 'ICE recovery does not replay volume keys');
+    const wheelCount = events.length;
+    const wheel = new WheelEvent('wheel',{deltaY:120,bubbles:true,cancelable:true});
+    video.dispatchEvent(wheel);
+    check(wheel.defaultPrevented && events.length === wheelCount+1, 'Wheel consumed and sent exactly once');
+    check(events.at(-1).type === 'ActionWheel' && events.at(-1).data.axis === -1, 'Wheel down direction');
+    video.dispatchEvent(new WheelEvent('wheel',{deltaY:-120,bubbles:true,cancelable:true}));
+    check(events.at(-1).data.axis === 1, 'Wheel up direction');
+    const beforeZero = events.length;
+    video.dispatchEvent(new WheelEvent('wheel',{deltaY:0,bubbles:true,cancelable:true}));
+    check(events.length === beforeZero, 'Zero wheel ignored');
     check(events.length === mirrored.length, 'Main and follower input payloads agree');
+    const mirroredBeforeAudio = mirrored.length;
+    check(sdk.disableAudio()===true && events.at(-1).data.value==='DISABLE','Audio mute sends remote audio control');
+    check(sdk.enableAudio()===true && events.at(-1).data.value==='ENABLE','Audio restore sends remote audio control');
+    check(mirrored.length===mirroredBeforeAudio,'Audio transmission is local to the current screen');
+    sdk.emit(api.WebRtcSdk.EVENTS.STOP_CONNECT);
+    const beforeOffline = events.length;
+    const offline = new WheelEvent('wheel',{deltaY:120,bubbles:true,cancelable:true});
+    video.dispatchEvent(offline);
+    check(events.length === beforeOffline && !offline.defaultPrevented, 'Disconnected screen ignores wheel');
+    check(sdk.volumeUp() === false && sdk.volumeDown() === false && events.length === beforeOffline, 'Disconnected volume methods send nothing');
     sdk.destroy(); const count = events.length;
     input.dispatchEvent(new ClipboardEvent('paste',{clipboardData:clip,cancelable:true,bubbles:true}));
     check(events.length === count && !host.children.length, 'Disposed session consumes no input');
    } finally { sdk?.destroy(); host.remove(); api.WebRtcClient.prototype.startConnection=originalStart; api.WebRtcClient.prototype.sendChannelData=originalSend; }
+  });
+  await page.evaluate(async () => {
+   const { createControlledSdk } = await import('/__verify/control.js');
+   const api = window.WebRTCSDK, sent = [], host = document.createElement('div'); document.body.append(host);
+   const start = api.WebRtcClient.prototype.startConnection, send = api.WebRtcClient.prototype.sendChannelData;
+   const drag = api.WebRtcSdk.prototype.drag;
+   let finish;
+   api.WebRtcClient.prototype.startConnection = function() {};
+   api.WebRtcClient.prototype.sendChannelData = function(type,data) { sent.push({type,data}); return true; };
+   api.WebRtcSdk.prototype.drag = function() { return new Promise(resolve => { finish = resolve; }); };
+   let sdk;
+   const check = (ok,label) => { if (!ok) throw new Error(label); };
+   try {
+    sdk = createControlledSdk(api,{mountedElement:host,connectConfig:{signalServerUrl:'wss://signal.example',roomId:'P1',token:'test-only',hostTurn:[]}});
+    sdk.init(); sdk.emit(api.WebRtcSdk.EVENTS.CONNECTED);
+    const video=host.querySelector('video');
+    Object.defineProperty(video,'videoWidth',{value:360});Object.defineProperty(video,'videoHeight',{value:640});
+    video.getBoundingClientRect=()=>({left:0,top:0,width:360,height:640});video.setPointerCapture=()=>{};
+    const pending=sdk.drag(0,0,1,1);
+    video.dispatchEvent(new PointerEvent('pointerdown',{pointerId:1,pointerType:'mouse',button:0,clientX:180,clientY:320,bubbles:true,cancelable:true}));
+    check(sent.length===0,'Manual pointer suppressed while programmed drag is pending');
+    await Promise.resolve(); finish(); await pending;
+    video.dispatchEvent(new PointerEvent('pointerdown',{pointerId:2,pointerType:'mouse',button:0,clientX:180,clientY:320,bubbles:true,cancelable:true}));
+    check(sent.length===1 && sent[0].data.action===0,'Manual pointer restored after programmed drag');
+    let rejected=false;try { await sdk.drag(0,0,1,1); } catch { rejected=true; }
+    check(rejected,'Programmed drag rejects while manual pointer is held');
+   } finally {
+    finish?.(); sdk?.destroy();host.remove();api.WebRtcClient.prototype.startConnection=start;api.WebRtcClient.prototype.sendChannelData=send;
+    if (drag) api.WebRtcSdk.prototype.drag=drag;else delete api.WebRtcSdk.prototype.drag;
+   }
   });
   await context.grantPermissions(['clipboard-read','clipboard-write']);
   await page.evaluate(async () => {
@@ -161,7 +225,54 @@ try {
    assert.equal(await page.evaluate(()=>window.pasteVerification.sent.find(event=>event.type==='ActionChinese').data.text.replace(/\r\n/g, '\n')),'实际 Ctrl+V\n你好');
   } finally { await page.evaluate(()=>{window.pasteVerification.cleanup();delete window.pasteVerification;}); }
   assert.deepEqual(errors,[]);
-  console.log(`${name}: paste/IME/key/touch/blur/cleanup and camera state/retry/switch/stop/error passed; rendered security guidance; invalid/expired/AK-SK rejected; SDK initialized/destroyed; no browser storage/OpenAPI calls; mobile fits`);
+  console.log(`${name}: paste/IME/key/touch/wheel/programmed-manual isolation/blur/cleanup and camera state/retry/switch/stop/error passed; rendered security guidance; invalid/expired/AK-SK rejected; SDK initialized/destroyed; no browser storage/OpenAPI calls; mobile fits`);
+  // Exercise each rendered page with its installed SDK and only simulated transports.
+  await page.evaluate(() => {
+   const state=window.sessionCheck={peers:[],sockets:[],actions:[]};
+   window.WebSocket=class {
+    constructor(){this.readyState=0;state.sockets.push(this);queueMicrotask(()=>{this.readyState=1;this.onopen?.({});});}
+    send(){} close(){this.readyState=3;}
+   };
+   window.RTCPeerConnection=class {
+    constructor(){
+     state.peers.push(this);this.iceConnectionState='new';this.closed=false;
+     this.channel={readyState:'open',send(value){state.actions.push(JSON.parse(new TextDecoder().decode(value)));},close(){this.readyState='closed';}};
+     queueMicrotask(()=>{if(!this.probe&&!this.closed){this.ondatachannel?.({channel:this.channel});this.iceConnectionState='connected';this.oniceconnectionstatechange?.();}});
+    }
+    createDataChannel(){this.probe=true;return {};}
+    async createOffer(){return {type:'offer',sdp:'test-only'};}
+    async setLocalDescription(){queueMicrotask(()=>this.onicecandidate?.({candidate:{candidate:'candidate relay test'}}));}
+    addTransceiver(){return {sender:{track:null,replaceTrack:async()=>{}}};}
+    close(){this.closed=true;this.channel.close();}
+    getStats(){return Promise.resolve(new Map());}
+   };
+  });
+  await input.fill(JSON.stringify({code:200000000,data:{...data,expiresAt:new Date(Date.now()+25000).toISOString()}}));
+  await connect.click();
+  await page.waitForFunction(()=>!document.querySelector('[aria-label="更多功能"]').disabled);
+  const moreButton=nav.getByRole('button',{name:'更多功能'});
+  await moreButton.click(); await nav.getByRole('menuitem',{name:'音量加',exact:true}).click();
+  assert.equal(await page.evaluate(()=>window.sessionCheck.actions.some(action=>action.type==='ActionInput'&&JSON.parse(action.data).keyCode===24)),true);
+  await moreButton.click(); await nav.getByRole('menuitem',{name:'静音',exact:true}).click();
+  assert.equal(await page.locator('.device video').evaluate(video=>video.muted),true);
+  await page.locator('h1').click();
+  assert.equal(await page.locator('.device video').evaluate(video=>video.muted),true);
+  assert.equal(await page.evaluate(()=>window.sessionCheck.actions.some(action=>action.type==='ActionCommandEvent'&&JSON.parse(action.data).value==='DISABLE')),true);
+  await moreButton.click();
+  await page.evaluate(()=>{const peer=window.sessionCheck.peers.find(peer=>!peer.probe);peer.iceConnectionState='disconnected';peer.oniceconnectionstatechange();});
+  assert.equal(await moreButton.isDisabled(),true); assert.equal(await nav.getByRole('menu').count(),0);
+  const sentBeforeRecovery=await page.evaluate(()=>window.sessionCheck.actions.length);
+  await page.evaluate(()=>{const peer=window.sessionCheck.peers.find(peer=>!peer.probe);peer.iceConnectionState='connected';peer.oniceconnectionstatechange();});
+  await page.waitForFunction(()=>!document.querySelector('[aria-label="更多功能"]').disabled);
+  assert.equal(await page.evaluate(()=>window.sessionCheck.actions.length),sentBeforeRecovery);
+  await moreButton.click(); await nav.getByRole('menuitem',{name:'恢复声音',exact:true}).click();
+  assert.equal(await page.locator('.device video').evaluate(video=>video.muted),false);
+  await page.evaluate(()=>{const peer=window.sessionCheck.peers.find(peer=>!peer.probe);peer.channel.readyState='closed';peer.channel.onclose?.();});
+  await page.waitForFunction(()=>document.querySelector('[aria-label="更多功能"]').disabled);
+  assert.equal(await page.locator('.device video').count(),0);
+  assert.equal(await page.evaluate(()=>window.sessionCheck.peers.every(peer=>peer.closed)&&window.sessionCheck.sockets.every(socket=>socket.readyState===3)),true);
+  assert.deepEqual(errors,[]);
+  console.log(`${name}: rendered navigation/volume/mute/ICE recovery/channel-close verified with installed SDK`);
   await context.close();
  }
 } finally { await browser.close(); await Promise.all(servers.map(server => new Promise(resolve => server.close(resolve)))); }

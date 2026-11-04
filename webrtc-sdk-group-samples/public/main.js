@@ -49,7 +49,7 @@ function sendFollowers(type, data) {
       gesture.clients.forEach(client => client.sendData(type, data)); gesture.data = data;
       if (data.action === 1) gesture = undefined;
     }
-  } else if ([ChannelDataType.ActionInput, ChannelDataType.ActionChinese].includes(type)) {
+  } else if ([ChannelDataType.ActionInput, ChannelDataType.ActionChinese, ChannelDataType.ActionWheel].includes(type)) {
     followers.forEach(client => client.sendData(type, data));
   }
 }
@@ -99,9 +99,15 @@ async function rebuildMain() {
       connectConfig: { signalServerUrl: ticket.signalServerUrl, roomId: ticket.roomId, token: ticket.token,
         hostTurn: ticket.turnServerUris, spareTurn: [], isGroup: false, signAgain: false } }, sendFollowers);
     sdk = current; cameraCleanup = mountCameraControls(WebRtcSdk, current, $('camera-controls'));
+    current.on('control-state', ({connected}) => {
+      if (sdk !== current) return;
+      if (!connected) finishFollowersTouch();
+      $('primary-status').textContent = connected ? '已连接' : '连接中';
+      document.querySelectorAll('[data-primary-action]').forEach(button => { button.disabled = !connected; });
+    });
     current.on(WebRtcSdk.EVENTS.CONNECTED, () => {
       if (sdk !== current) return;
-      $('primary-status').textContent = '已连接'; document.querySelectorAll('[data-primary-action]').forEach(button => { button.disabled = false; });
+      current.disableAudio(); $('primary-status').textContent = '已连接'; document.querySelectorAll('[data-primary-action]').forEach(button => { button.disabled = false; });
     });
     const failed = () => {
       if (sdk !== current) return;

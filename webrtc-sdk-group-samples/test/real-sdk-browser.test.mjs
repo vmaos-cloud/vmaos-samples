@@ -58,12 +58,24 @@ test('installed SDK drives group actions and releases transports on switching an
   for (const phone of phones) await page.locator('#phones tr').filter({ hasText: phone.phoneCode }).getByRole('checkbox').check();
   await page.getByRole('button', { name: '群控所选云机' }).click();
   await page.waitForFunction(() => window.transportTest.sockets.some(socket => socket.rooms?.length === 2) && window.transportTest.peers.length === 1 && document.getElementById('primary-status').textContent === '已连接');
-  await page.getByRole('button', { name: '主页', exact: true }).click();
+  await page.getByRole('button', { name: 'Home', exact: true }).click();
   await page.waitForFunction(() => window.transportTest.groupActions.length === 1 && window.transportTest.actions.some(action => action.type === 'ActionInput'));
   assert.deepEqual(await page.evaluate(() => window.transportTest.groupActions[0].rooms.sort()), ['P2', 'P3']);
   const actions = await page.evaluate(() => ({ primary: window.transportTest.actions.find(action => action.type === 'ActionInput'), follower: window.transportTest.groupActions[0].action }));
   assert.equal(JSON.parse(actions.primary.data).keyCode, 3);
   assert.equal(JSON.parse(actions.follower.data).keyCode, 3);
+  assert.equal(await page.locator('#primary video').evaluate(video=>video.muted),true);
+  assert.deepEqual(await page.locator('nav button').allTextContents(),['最近任务','Home','返回']);
+  await page.evaluate(()=>{
+    const event=new WheelEvent('wheel',{deltaY:120,bubbles:true,cancelable:true});
+    document.querySelector('#primary video').dispatchEvent(event);
+    window.groupWheelPrevented=event.defaultPrevented;
+  });
+  await page.waitForFunction(()=>window.transportTest.groupActions.some(entry=>entry.action.type==='ActionWheel'));
+  assert.equal(await page.evaluate(()=>window.groupWheelPrevented),true);
+  assert.deepEqual(await page.evaluate(()=>window.transportTest.groupActions.filter(entry=>entry.action.type==='ActionWheel').map(entry=>JSON.parse(entry.action.data).axis)),[-1]);
+  assert.equal(await page.evaluate(()=>window.transportTest.actions.some(action=>action.type==='ActionCommandEvent'&&JSON.parse(action.data).value==='DISABLE')),true);
+
   await page.evaluate(() => {
     const host=document.getElementById('primary'); host.dispatchEvent(new PointerEvent('pointerenter'));
     const input=host.querySelector('[aria-label="云机键盘输入"]'), clipboard=new DataTransfer();
@@ -119,7 +131,7 @@ test('installed SDK drives group actions and releases transports on switching an
   assert.equal(await page.evaluate(() => window.transportTest.peers.length), peers);
   const priorGroupActions = await page.evaluate(() => window.transportTest.groupActions.length);
   const priorPrimaryActions = await page.evaluate(() => window.transportTest.actions.filter(action => action.type === 'ActionInput').length);
-  await page.getByRole('button', { name: '主页', exact: true }).click();
+  await page.getByRole('button', { name: 'Home', exact: true }).click();
   await page.waitForFunction(count => window.transportTest.actions.filter(action => action.type === 'ActionInput').length > count, priorPrimaryActions);
   assert.equal(await page.evaluate(() => window.transportTest.groupActions.length), priorGroupActions);
   const logout = page.waitForResponse(response => response.url().endsWith('/api/logout'));

@@ -3,6 +3,7 @@ import { mountCloudClipboard } from "./clipboard.js";
 // Keep this file beside the demo when copying it into a separate project.
 export function createControlledSdk(api, options, onAction = () => {}) {
   const host = typeof options.mountedElement === 'string' ? document.querySelector(options.mountedElement) : options.mountedElement;
+  let terminal = false, audioEnabled = true;
   let ready = false, focused = false, disposed = false, client, gesture, composing = false, committed;
   let clipboardCleanup;
   const input = document.createElement('textarea');
@@ -10,12 +11,14 @@ export function createControlledSdk(api, options, onAction = () => {}) {
   input.autocomplete = 'off'; input.autocapitalize = 'off'; input.spellcheck = false;
   input.tabIndex = -1;
   Object.assign(input.style, { position: 'absolute', width: '1px', height: '1px', opacity: '0', padding: '0', border: '0', pointerEvents: 'none' });
+  let programmaticPending = 0;
   const listeners = [];
   function listen(target, type, handler, capture = false) {
     target.addEventListener(type, handler, capture);
     listeners.push(() => target.removeEventListener(type, handler, capture));
   }
-  const send = (type, data) => ready && !disposed && client?.sendChannelData(type, data);
+  const syncAudio = () => host.querySelectorAll('video,audio').forEach(media => { media.muted = !audioEnabled; });
+  const send = (type, data) => ready && !disposed && !terminal && client?.sendChannelData(type, data);
   const text = value => { if (focused && value) send(api.ChannelDataType.ActionChinese, new api.InputData(value)); input.value = ''; };
   function finishTouch() {
     if (!gesture) return;
@@ -37,7 +40,7 @@ export function createControlledSdk(api, options, onAction = () => {}) {
     if (!(event.target instanceof HTMLVideoElement)) return;
     // Suppress the built-in pointer handler so every gesture is sent exactly once.
     event.preventDefault(); event.stopImmediatePropagation();
-    if (!ready || disposed) return;
+    if (!ready || disposed || terminal || programmaticPending) return;
     const video = event.target, position = point(video, event);
     if (event.type === 'pointerdown') {
       focus();
@@ -51,14 +54,26 @@ export function createControlledSdk(api, options, onAction = () => {}) {
       else send(api.ChannelDataType.ClickData, new api.TouchData(2, 0, gesture.x, gesture.y, Math.max(0, Math.round(performance.now() - gesture.started))));
     }
   }
+  function wheel(event) {
+    if (!(event.target instanceof HTMLVideoElement)) return;
+    // The adapter owns this event, including when the session has disconnected.
+    event.stopImmediatePropagation();
+    if (!ready || disposed || !Number.isFinite(event.deltaY) || !event.deltaY) return;
+    if (send(api.ChannelDataType.ActionWheel, new api.WheelData(-Math.sign(event.deltaY))) === true) event.preventDefault();
+  }
   const sdk = new api.WebRtcSdk({ ...options, disabled: true, enabledIMEKeyboard: false }, {
     clientFactory(config) {
       clipboardCleanup?.();
       client = new api.WebRtcClient(config);
+      client.on(api.EmitType.iceConnectionState, state => {
+        if (state === 'disconnected') { blur(); ready = false; sdk.emit('control-state', {connected:false}); }
+        else if (['failed','closed'].includes(state)) sdk.emit(api.WebRtcSdk.EVENTS.ERROR, {message:'远程连接已断开，请重新获取票据'});
+      });
+      client.on(api.EmitType.controlChannelClosed, () => sdk.emit(api.WebRtcSdk.EVENTS.ERROR, {message:'控制通道已断开，请重新获取票据'}));
       clipboardCleanup = mountCloudClipboard(api, client);
       const original = client.sendChannelData.bind(client);
       client.sendChannelData = (type, data) => {
-        if ([api.ChannelDataType.ClickData, api.ChannelDataType.ActionInput, api.ChannelDataType.ActionChinese].includes(type)) {
+        if ([api.ChannelDataType.ClickData, api.ChannelDataType.ActionInput, api.ChannelDataType.ActionChinese, api.ChannelDataType.ActionWheel].includes(type)) {
           if (!ready || disposed) return false;
           const accepted = original(type, data);
           if (accepted !== false) onAction(type, data);
@@ -69,14 +84,39 @@ export function createControlledSdk(api, options, onAction = () => {}) {
       return client;
     },
   });
-  const connected = () => { ready = true; };
-  const disconnected = () => { blur(); ready = false; clipboardCleanup?.(); };
+  // Audio stays local to this screen; only accepted input is mirrored to followers.
+  for (const [name,value] of [['enableAudio','ENABLE'],['disableAudio','DISABLE']]) {
+    sdk[name] = () => {
+      const accepted = send(api.ChannelDataType.ActionCommandEvent, {action:'ACTION_CONTROL_AUDIO',value}) === true;
+      if (accepted) { audioEnabled = value === 'ENABLE'; syncAudio(); }
+      return accepted;
+    };
+  }
+  for (const name of ['volumeUp','volumeDown','scroll','goHome','goBack','goTask']) {
+    const method = sdk[name].bind(sdk);
+    sdk[name] = (...args) => ready && !disposed && !terminal ? method(...args) : false;
+  }
+  // Coordinate the adapter's manual pointer with newer public SDK gesture methods.
+  for (const name of ['click', 'swipe', 'drag']) {
+    if (typeof sdk[name] !== 'function') continue;
+    const method = sdk[name].bind(sdk);
+    sdk[name] = (...args) => {
+      if (!ready || disposed || terminal || gesture) return Promise.reject(new Error('云机未连接或手动触摸进行中'));
+      programmaticPending++;
+      return Promise.resolve().then(() => method(...args)).finally(() => { programmaticPending--; });
+    };
+  }
+  const connected = () => { if (!disposed && !terminal) { ready = true; sdk.emit('control-state',{connected:true}); } };
+  const disconnected = () => { blur(); ready = false; terminal = true; clipboardCleanup?.(); sdk.emit('control-state',{connected:false}); };
   sdk.on(api.WebRtcSdk.EVENTS.CONNECTED, connected);
   sdk.on(api.WebRtcSdk.EVENTS.ERROR, disconnected);
   sdk.on(api.WebRtcSdk.EVENTS.STOP_CONNECT, disconnected);
   const init = sdk.init.bind(sdk), destroy = sdk.destroy.bind(sdk);
   sdk.init = () => {
     init(); host.append(input);
+    // Run after the SDK's browser autoplay-unlock listener, retaining user mute.
+    listen(document, 'click', syncAudio);
+    listen(host, 'wheel', wheel, { capture: true, passive: false });
     listen(host, 'pointerenter', focus);
     listen(host, 'pointerleave', () => { if (!gesture) blur(); });
     for (const event of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'lostpointercapture']) listen(host, event, pointer, true);
