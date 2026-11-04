@@ -13,7 +13,7 @@
     "prebuild": "node prepare-sdk.mjs"
   },
   "dependencies": {
-    "@vmaos/webrtc-sdk": "0.3.0"
+    "@vmaos/webrtc-sdk": "0.3.2"
   },
   "devDependencies": {
     "vite": "8.3.0"

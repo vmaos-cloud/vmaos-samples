@@ -1,2 +1,2 @@
 minimumReleaseAgeExclude:
-  - '@vmaos/webrtc-sdk@0.3.0'
+  - '@vmaos/webrtc-sdk@0.3.2'
