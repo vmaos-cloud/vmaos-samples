@@ -1,5 +1,6 @@
 node_modules/
 dist/
+vanilla/pnpm-lock.yaml
 script/public/sdk/
 playwright-report/
 test-results/
