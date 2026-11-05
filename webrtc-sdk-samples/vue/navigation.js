@@ -1,3 +1,4 @@
+import { mountRelativeVolume } from "./volume.js";
 // Public SDK controls for a single cloud screen. Keep beside the copied demo.
 export function mountRemoteNavigation(host) {
   host.innerHTML = `<nav class="remote-navigation" aria-label="云机导航">
@@ -5,21 +6,21 @@ export function mountRemoteNavigation(host) {
     <button type="button" aria-label="Home" title="Home" data-action="goHome" disabled>⌂</button>
     <button type="button" aria-label="返回" title="返回" data-action="goBack" disabled>‹</button>
     <button type="button" aria-label="更多功能" title="更多功能" aria-haspopup="menu" aria-expanded="false" disabled>⋯</button>
-    <div class="remote-more-menu" role="menu" aria-label="更多功能" hidden>
-      <button type="button" role="menuitem" data-action="volumeUp" disabled>音量加</button>
-      <button type="button" role="menuitem" data-action="volumeDown" disabled>音量减</button>
-      <button type="button" role="menuitem" data-audio disabled>静音</button>
+    <div class="remote-more-menu" hidden><div data-volume></div>
+      <div role="menu" aria-label="更多功能"><button type="button" role="menuitem" data-audio disabled>静音</button></div>
     </div></nav>`;
   const more = host.querySelector('[aria-haspopup="menu"]');
-  const menu = host.querySelector('[role="menu"]');
+  const menu = host.querySelector('.remote-more-menu');
   const audio = host.querySelector('[data-audio]');
   let sdk, connected = false, audioEnabled = true, unbind = () => {};
-  function close() { menu.hidden = true; more.setAttribute('aria-expanded','false'); }
+  const volume = mountRelativeVolume(host.querySelector('[data-volume]'), {up:()=>sdk?.volumeUp()===true,down:()=>sdk?.volumeDown()===true});
+  function close() { menu.hidden = true; more.setAttribute('aria-expanded','false'); volume.setEnabled(false); }
   function state(value) {
     connected = value;
     host.querySelectorAll('button').forEach(button => { button.disabled = !value; });
     const video = host.parentElement?.querySelector('video');
     if (video) video.muted = !audioEnabled;
+    volume.setEnabled(value && !menu.hidden);
     if (!value) close();
   }
   function click(event) {
@@ -27,7 +28,8 @@ export function mountRemoteNavigation(host) {
     if (!button || !host.contains(button) || !connected || !sdk) return;
     if (button === more) {
       menu.hidden = !menu.hidden; more.setAttribute('aria-expanded',String(!menu.hidden));
-      if (!menu.hidden) menu.querySelector('button').focus();
+      volume.setEnabled(!menu.hidden && connected);
+      if (!menu.hidden) menu.querySelector('input').focus();
       return;
     }
     if (button === audio) {
@@ -41,7 +43,7 @@ export function mountRemoteNavigation(host) {
   function keyboard(event) {
     if (menu.hidden) return;
     if (event.key === 'Escape') { event.preventDefault(); close(); more.focus(); }
-    else if (['ArrowDown','ArrowUp'].includes(event.key)) {
+    else if (event.target.tagName !== 'INPUT' && ['ArrowDown','ArrowUp'].includes(event.key)) {
       event.preventDefault();
       const items = [...menu.querySelectorAll('button')], current = items.indexOf(document.activeElement);
       items[(current + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length].focus();
@@ -66,7 +68,7 @@ export function mountRemoteNavigation(host) {
     },
     disconnect,
     destroy() {
-      disconnect(); host.removeEventListener('click',click);
+      disconnect(); volume.destroy(); host.removeEventListener('click',click);
       document.removeEventListener('pointerdown',outside); document.removeEventListener('keydown',keyboard);
       window.removeEventListener('blur',close); host.replaceChildren();
     },

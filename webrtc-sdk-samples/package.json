@@ -14,7 +14,8 @@
     "verify:browser": "node scripts/verify-browser.mjs",
     "dev": "node scripts/dev.mjs",
     "verify:clipboard": "node scripts/verify-clipboard.mjs",
-    "verify:navigation": "node scripts/verify-navigation.mjs"
+    "verify:navigation": "node scripts/verify-navigation.mjs",
+    "verify:volume": "node scripts/verify-volume.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0"

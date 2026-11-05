@@ -11,7 +11,7 @@ const demos = ['vanilla', 'react', 'vue', 'script'];
 const server = createServer(async (req, res) => {
   try {
     const [, index, name] = req.url.split('/');
-    if (!demos[index] || !['sdk.js', 'navigation.js'].includes(name)) {
+    if (!demos[index] || !['sdk.js', 'navigation.js', 'volume.js'].includes(name)) {
       res.setHeader('Content-Type', 'text/html'); res.end('<div id="navigation"></div>'); return;
     }
     const dir = resolve(root, demos[index]);
@@ -43,7 +43,12 @@ try {
       check([...host.querySelectorAll('button')].every(button => button.disabled), 'No operation before connection');
       nav.bind(Sdk,sdk); sdk.emit(Sdk.EVENTS.CONNECTED);
       more().click(); check(more().getAttribute('aria-expanded') === 'true', 'More menu opens');
-      item('音量加').click(); check(calls.at(-1)==='volumeUp' && more().getAttribute('aria-expanded')==='false', 'Volume action closes menu');
+      const slider=host.querySelector('input[type=range]');
+      slider.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true})); slider.value='1'; slider.dispatchEvent(new Event('input',{bubbles:true}));
+      check(calls.length===0,'Relative volume previews without sending');
+      slider.dispatchEvent(new KeyboardEvent('keyup',{key:'ArrowRight',bubbles:true}));
+      check(calls.at(-1)==='volumeUp' && slider.value==='0' && more().getAttribute('aria-expanded')==='true','Release adjusts once, centres and retains popup');
+      more().click();
       more().click(); item('静音').click();
       more().click(); check(item('恢复声音') && calls.at(-1)==='disableAudio', 'Mute becomes restore');
       accepted=false; item('恢复声音').click(); more().click(); check(item('恢复声音'), 'Failed send retains mute state');
@@ -52,7 +57,7 @@ try {
       more().click(); document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); check(more().getAttribute('aria-expanded')==='false', 'Escape closes menu');
       more().click(); sdk.emit('control-state',{connected:false});
       check(more().disabled && more().getAttribute('aria-expanded')==='false', 'ICE interruption disables and closes menu');
-      const count=calls.length; item('音量加').click(); check(calls.length===count, 'No offline operation');
+      const count=calls.length; slider.dispatchEvent(new KeyboardEvent('keydown',{key:'End',bubbles:true}));slider.value='5';slider.dispatchEvent(new Event('input',{bubbles:true}));slider.dispatchEvent(new KeyboardEvent('keyup',{key:'End',bubbles:true}));check(calls.length===count&&slider.disabled,'No offline operation');
       sdk.emit('control-state',{connected:true}); more().click(); check(item('静音'), 'ICE recovery retains session audio state');
       sdk.emit(Sdk.EVENTS.STOP_CONNECT); check(more().disabled, 'Terminal disconnect disables navigation');
       nav.disconnect(); check(sdk.listenerCount('control-state')===0, 'Replacing session releases listeners');
