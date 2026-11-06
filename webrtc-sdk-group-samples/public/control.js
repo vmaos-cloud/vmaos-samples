@@ -146,6 +146,15 @@ export function createControlledSdk(api, options, onAction = () => {}) {
       if (keyCode !== -1) { event.preventDefault(); send(api.ChannelDataType.ActionInput, new api.KeyEventData(keyCode, meta)); }
     });
   };
+  // Sample adapter methods for programmatic text/keys; these are not native WebRtcSdk methods.
+  sdk.sendTextInput = value => {
+    if (typeof value !== 'string' || !value) throw new TypeError('请输入非空纯文本');
+    finishTouch(); return send(api.ChannelDataType.ActionChinese, new api.InputData(value));
+  };
+  sdk.sendKey = (keyCode, meta = 0) => {
+    if (!Number.isInteger(keyCode) || keyCode < 0 || !Number.isInteger(meta) || meta < 0) throw new TypeError('按键与修饰值须为非负整数');
+    finishTouch(); return send(api.ChannelDataType.ActionInput, new api.KeyEventData(keyCode, meta));
+  };
   sdk.cancelInput = blur;
   sdk.destroy = () => {
     if (disposed) return;

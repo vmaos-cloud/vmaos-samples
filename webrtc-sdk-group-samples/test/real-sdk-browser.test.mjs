@@ -1,7 +1,27 @@
+import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium } from '@playwright/test';
 import { createSampleServer } from '../server.mjs';
+
+// Execute the README examples themselves so documentation and public sample calls stay aligned.
+const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
+function documentedExample(name) {
+  const start = readme.indexOf(`<!-- example: ${name} -->`);
+  assert(start >= 0, `Missing README example: ${name}`);
+  const rest = readme.slice(start), begin = rest.indexOf('```js\n') + 6;
+  const end = rest.indexOf('\n```', begin);
+  assert(begin >= 6 && end > begin, `Missing JavaScript block: ${name}`);
+  return rest.slice(begin, end);
+}
+async function runExample(page, name) {
+  const code = documentedExample(name);
+  return page.evaluate(async source => {
+    const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+    await new AsyncFunction('var groupControls = (await import("/main.js")).groupControls;\n' + source)();
+    return (await import('/main.js')).groupControls.getState();
+  }, code);
+}
 
 // Exercise the installed SDK through the sample, while replacing only the external
 // OpenAPI, signaling and peer transports. This does not test real media or devices.
@@ -99,7 +119,9 @@ test('installed SDK drives group actions and releases transports on switching an
   const touch=await page.evaluate(()=>window.transportTest.groupActions.filter(a=>a.action.type==='ClickData').map(a=>JSON.parse(a.action.data).action));
   assert.deepEqual(touch,[0,1]);
   // Selection updates only follower sockets, keeping the established main peer.
-  await page.locator('.tile').filter({has:page.getByText('P3',{exact:true})}).getByRole('checkbox').uncheck();
+  const third = page.locator('.tile').filter({has:page.getByText('P3',{exact:true})});
+  await third.getByRole('button', { name: '操控', exact: true }).click();
+  await third.getByRole('menuitemcheckbox', { name: '参与同步', exact: true }).click();
   await page.waitForFunction(()=>window.transportTest.sockets.some(socket=>socket.rooms?.length===1&&socket.rooms[0]==='P2'&&socket.readyState===1));
   assert.equal(await page.evaluate(()=>window.transportTest.peers.length),1);
   // Remote copy comes from the primary data channel and is never mirrored.
@@ -116,7 +138,8 @@ test('installed SDK drives group actions and releases transports on switching an
   assert.equal(await page.evaluate(() => window.copiedCloudText), '主控文字\nhello 😀');
   assert.equal(await page.evaluate(() => window.transportTest.groupActions.length), groupActionsBeforeCopy);
   const second = page.locator('.tile').filter({ has: page.getByText('P2', { exact: true }) });
-  await second.getByRole('button', { name: '设为主控' }).click();
+  await second.getByRole('button', { name: '操控', exact: true }).click();
+  await second.getByRole('menuitem', { name: '设为主控', exact: true }).click();
   await page.waitForFunction(() => document.getElementById('primary-name').textContent === 'P2' && window.transportTest.peers.length === 2);
   assert.equal(await page.evaluate(() => window.transportTest.peers[0].closed), true);
   assert.equal(await page.locator('[data-cloud-clipboard]').count(), 0);
@@ -134,6 +157,59 @@ test('installed SDK drives group actions and releases transports on switching an
   await page.getByRole('button', { name: 'Home', exact: true }).click();
   await page.waitForFunction(count => window.transportTest.actions.filter(action => action.type === 'ActionInput').length > count, priorPrimaryActions);
   assert.equal(await page.evaluate(() => window.transportTest.groupActions.length), priorGroupActions);
+  // Customers call switchPrimary on the existing group, rather than calling start again.
+  await page.evaluate(async () => {
+    const { groupControls: controls } = await import('/main.js');
+    await controls.switchPrimary('P1'); await controls.waitUntilReady();
+  });
+  const beforeSwitch = await page.evaluate(() => window.transportTest.peers.length);
+  const switched = await runExample(page, 'switch-primary');
+  assert.equal(switched.primaryCode, 'P2');
+  assert.deepEqual(switched.members.map(phone => phone.phoneCode), ['P1', 'P2', 'P3']);
+  assert.equal(await page.evaluate(() => window.transportTest.peers.length), beforeSwitch + 1);
+  await runExample(page, 'switch-primary');
+  assert.equal(await page.evaluate(() => window.transportTest.peers.length), beforeSwitch + 1, 'Selecting the existing primary must not reconnect');
+  const invalidSwitch = await page.evaluate(async () => {
+    const { groupControls: controls } = await import('/main.js');
+    try { await controls.switchPrimary('missing'); return false; } catch { return controls.getState().primaryCode === 'P2'; }
+  });
+  assert.equal(invalidSwitch, true);
+  await page.evaluate(async () => {
+    const { groupControls: controls } = await import('/main.js');
+    await controls.setParticipating('P3', true); await controls.setSynchronous(true); await controls.waitUntilReady();
+  });
+  const beforeInput = await page.evaluate(() => ({ main: window.transportTest.actions.length, followers: window.transportTest.groupActions.length }));
+  await runExample(page, 'navigation');
+  await runExample(page, 'gestures');
+  await runExample(page, 'text-and-key');
+  const forwarded = await page.evaluate(before => ({
+    main: window.transportTest.actions.slice(before.main), followers: window.transportTest.groupActions.slice(before.followers),
+  }), beforeInput);
+  assert(forwarded.main.some(action => action.type === 'ActionChinese' && JSON.parse(action.data).text === '你好，群控示例'));
+  assert(forwarded.main.some(action => action.type === 'ActionInput' && JSON.parse(action.data).keyCode === 66));
+  assert(forwarded.main.some(action => action.type === 'ClickData'));
+  assert(forwarded.main.some(action => action.type === 'ActionWheel'));
+  const payload = action => ({ type: action.type, data: JSON.parse(action.data) });
+  assert.deepEqual(forwarded.followers.map(item => payload(item.action)), forwarded.main.filter(action => ['ActionInput', 'ActionChinese', 'ClickData', 'ActionWheel'].includes(action.type)).map(payload));
+  assert(forwarded.followers.every(item => item.rooms.length === 2 && item.rooms.includes('P1') && item.rooms.includes('P3')));
+  const stablePeerCount = await page.evaluate(() => window.transportTest.peers.length);
+  const excluded = await runExample(page, 'exclude-member');
+  assert.equal(excluded.members.find(phone => phone.phoneCode === 'P3').participating, false);
+  await runExample(page, 'remove-member');
+  const added = await runExample(page, 'add-member');
+  assert.equal(added.primaryCode, 'P2');
+  assert.equal(added.members.find(phone => phone.phoneCode === 'P3').participating, true);
+  await runExample(page, 'retry-followers');
+  await runExample(page, 'refresh-previews');
+  assert.equal(await page.evaluate(() => window.transportTest.peers.length), stablePeerCount, 'Member/follower/preview changes must preserve the primary peer');
+  const onlyMain = await runExample(page, 'sync-off');
+  assert.equal(onlyMain.synchronous, false);
+  await runExample(page, 'retry-primary');
+  const reconnected = await runExample(page, 'disconnect-reconnect');
+  assert.equal(reconnected.primaryCode, 'P2');
+  assert.equal(reconnected.members.length, 3);
+  assert.equal(reconnected.synchronous, false);
+  assert.equal(reconnected.ready, true);
   const logout = page.waitForResponse(response => response.url().endsWith('/api/logout'));
   await page.getByRole('button', { name: '退出并清除凭据' }).click(); await logout;
   assert.equal(await page.evaluate(() => window.transportTest.peers.every(peer => peer.closed) && window.transportTest.sockets.every(socket => socket.readyState === 3)), true);

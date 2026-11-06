@@ -43,17 +43,58 @@ test('AK/SK query, selection, group controls and primary switching use the publi
   await page.locator('#phones tr').first().waitFor();
   assert.equal(await page.locator('[name=accessKey]').inputValue(), 'test-ak');
   assert.equal(await page.locator('[name=secretKey]').inputValue(), 'test-sk');
-  for (const phone of phones) await page.locator('#phones tr').filter({ hasText: phone.phoneCode }).getByRole('checkbox').check();
+  for (const phone of phones.slice(0, 2)) await page.locator('#phones tr').filter({ hasText: phone.phoneCode }).getByRole('checkbox').check();
   await page.getByRole('button', { name: '群控所选云机' }).click();
   await page.locator('#primary video').waitFor();
+  await page.getByRole('button', { name: '新增云机', exact: true }).click();
+  const picker = page.getByRole('dialog', { name: '新增群控云机' });
+  await picker.getByRole('checkbox', { name: 'P3', exact: true }).check();
+  assert.equal(await picker.getByRole('checkbox', { name: 'P1（已在群控中）', exact: true }).isDisabled(), true);
+  await picker.getByRole('button', { name: '加入群控', exact: true }).click();
+  await page.waitForFunction(() => document.getElementById('follower-status').textContent === '从控控制就绪 2 / 2 台');
+  await page.locator('.tile .picture img').first().waitFor();
+  for (const width of [1630, 1024, 375]) {
+    await page.setViewportSize({ width, height: 970 });
+    assert.equal(await page.locator('.tile header').evaluateAll(headers => headers.every(header => {
+      const code = header.querySelector('strong');
+      return header.firstElementChild.textContent.match(/主控|从控/) && code.scrollWidth <= code.clientWidth + 1
+        && getComputedStyle(code).textOverflow !== 'ellipsis' && header.querySelectorAll('summary').length === 1;
+    })), true);
+    assert.equal(await page.locator('.picture').first().evaluate(box => box.getBoundingClientRect().height), 480);
+    assert.equal(await page.locator('.picture img').first().evaluate(img => {
+      const box=img.parentElement.getBoundingClientRect(), frame=img.getBoundingClientRect();
+      return frame.bottom <= box.bottom + 1 && frame.top >= box.top - 1 && getComputedStyle(img).objectFit === 'contain';
+    }), true);
+  }
+  await page.setViewportSize({ width: 1630, height: 970 });
   await page.getByRole('button', { name: 'Home', exact: true }).click();
   assert.deepEqual((await page.evaluate(() => window.sent.filter(item=>item.type==='ActionInput'))).map(item => item.room).sort(), ['P1', 'P2', 'P3']);
   const second = page.locator('.tile').filter({ has: page.getByText('P2', { exact: true }) });
-  await second.getByRole('button', { name: '设为主控' }).click();
+  await second.getByRole('button', { name: '操控', exact: true }).click();
+  await second.getByRole('menuitem', { name: '设为主控', exact: true }).click();
   await page.waitForFunction(() => document.getElementById('primary-name').textContent === 'P2' && document.querySelector('#primary video'));
   assert.equal(await second.locator('.picture').innerText(), '操控中');
   assert.deepEqual(await page.locator('.tile strong').allTextContents(), ['P1', 'P2', 'P3']);
   assert.equal(await page.evaluate(() => window.maximum), 1);
+  const third = page.locator('.tile').filter({ has: page.getByText('P3', { exact: true }) });
+  await third.getByRole('button', { name: '操控', exact: true }).click();
+  assert.equal(await third.getByRole('menuitemcheckbox', { name: '参与同步', exact: true }).getAttribute('aria-checked'), 'true');
+  await third.getByRole('menuitemcheckbox', { name: '参与同步', exact: true }).click();
+  await page.waitForFunction(() => document.getElementById('follower-status').textContent === '从控控制就绪 1 / 1 台');
+  await third.getByRole('button', { name: '操控', exact: true }).click();
+  await third.getByRole('menuitem', { name: '移除', exact: true }).click();
+  assert.deepEqual(await page.locator('.tile strong').allTextContents(), ['P1', 'P2']);
+  const newSecond = page.locator('.tile').filter({ has: page.getByText('P2', { exact: true }) });
+  await newSecond.getByRole('button', { name: '操控', exact: true }).click();
+  await newSecond.getByRole('menuitem', { name: '移除', exact: true }).click();
+  await page.waitForFunction(() => document.getElementById('primary-name').textContent === 'P1' && document.querySelector('#primary video'));
+  const remaining = page.locator('.tile');
+  await remaining.getByRole('button', { name: '操控', exact: true }).click();
+  assert.equal(await remaining.getByRole('menuitem', { name: '移除', exact: true }).isDisabled(), true);
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: '断开群控', exact: true }).click();
+  await page.getByRole('button', { name: '重新连接', exact: true }).click();
+  await page.locator('#primary video').waitFor();
   await page.locator('#sync').uncheck();
   await page.waitForFunction(() => document.querySelector('#primary video') !== null);
   assert.equal(await page.evaluate(() => window.active), 1);
